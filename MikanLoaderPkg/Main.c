@@ -70,8 +70,8 @@ EFI_STATUS SaveMemoryMap(struct MemoryMap* map, EFI_FILE_PROTOCOL* file) {
     return status;
   }
 
-  Print(L"map->buffer = %08lx, map->map_size = %08lx\n",
-      map->buffer, map->map_size);
+//   Print(L"map->buffer = %08lx, map->map_size = %08lx\n",
+    //   map->buffer, map->map_size);
 
   EFI_PHYSICAL_ADDRESS iter;
   int i;
@@ -206,7 +206,11 @@ EFI_STATUS EFIAPI UefiMain(
     EFI_SYSTEM_TABLE* system_table) {
   EFI_STATUS status;
 
-  Print(L"Hello, Mikan World!\n");
+  
+
+//   Halt();
+
+//   Print(L"Hello, Mikan World!\n");
 
   CHAR8 memmap_buf[4096 * 4];
   struct MemoryMap memmap = {sizeof(memmap_buf), memmap_buf, 0, 0, 0, 0};
@@ -250,22 +254,53 @@ EFI_STATUS EFIAPI UefiMain(
     Halt();
   }
 
-  Print(L"Resolution: %ux%u, Pixel Format: %s, %u pixels/line\n",
-      gop->Mode->Info->HorizontalResolution,
-      gop->Mode->Info->VerticalResolution,
-      GetPixelFormatUnicode(gop->Mode->Info->PixelFormat),
-      gop->Mode->Info->PixelsPerScanLine);
-  Print(L"Frame Buffer: 0x%0lx - 0x%0lx, Size: %lu bytes\n",
-      gop->Mode->FrameBufferBase,
-      gop->Mode->FrameBufferBase + gop->Mode->FrameBufferSize,
-      gop->Mode->FrameBufferSize);
+//   Print(L"Resolution: %ux%u, Pixel Format: %s, %u pixels/line\n",
+//       gop->Mode->Info->HorizontalResolution,
+//       gop->Mode->Info->VerticalResolution,
+//       GetPixelFormatUnicode(gop->Mode->Info->PixelFormat),
+//       gop->Mode->Info->PixelsPerScanLine);
+//   Print(L"Frame Buffer: 0x%0lx - 0x%0lx, Size: %lu bytes\n",
+//       gop->Mode->FrameBufferBase,
+//       gop->Mode->FrameBufferBase + gop->Mode->FrameBufferSize,
+//       gop->Mode->FrameBufferSize);
 
   UINT8* frame_buffer = (UINT8*)gop->Mode->FrameBufferBase;
-  for (UINTN i = 0; i < gop->Mode->FrameBufferSize; ++i) {
-    frame_buffer[i] = 255;
+//   for (UINTN i = 0; i < gop->Mode->FrameBufferSize; ++i) {
+//     frame_buffer[i] = 255;
+//   }
+
+  for (UINTN i = 32; i < 128; ++i) {
+    Print(L"%c", (CHAR16)(i));
+  }
+  Print(L"\n");
+
+  UINT32 ppsl = gop->Mode->Info->PixelsPerScanLine;
+  UINT32 *screen = (UINT32*)frame_buffer;
+
+  UINT8 *font_pool;
+  status = gBS->AllocatePool(EfiLoaderData, EFI_GLYPH_WIDTH * EFI_GLYPH_HEIGHT * 128, (VOID**)&font_pool);
+  if (EFI_ERROR(status)) {
+    Print(L"failed to allocate font_pool: %r\n", status);
+    Halt();
   }
 
-  EFI_FILE_PROTOCOL* kernel_file;
+  for (int line = 0; line < 2; ++line) {
+    for (int chs = 0; chs < 80; ++chs) {
+      UINTN code = 32 + chs + line * 80;
+      if (code >= 128) break;
+      for (int y = 0; y < EFI_GLYPH_HEIGHT; ++y) {
+        UINT8 pixels = 0;
+        for (int x = 0; x < EFI_GLYPH_WIDTH; ++x) {
+          if (screen[80 + 62 * ppsl + chs * EFI_GLYPH_WIDTH + line * EFI_GLYPH_HEIGHT * ppsl + y * ppsl + x] != 0){
+            pixels |= (1 << x);
+          }
+        }
+        font_pool[EFI_GLYPH_HEIGHT * code + y] = pixels;
+      }
+    }
+  }
+
+  EFI_FILE_PROTOCOL *kernel_file;
   status = root_dir->Open(
       root_dir, &kernel_file, L"\\kernel.elf",
       EFI_FILE_MODE_READ, 0);
@@ -286,6 +321,7 @@ EFI_STATUS EFIAPI UefiMain(
 
   EFI_FILE_INFO* file_info = (EFI_FILE_INFO*)file_info_buffer;
   UINTN kernel_file_size = file_info->FileSize;
+
 
   VOID* kernel_buffer;
   status = gBS->AllocatePool(EfiLoaderData, kernel_file_size, &kernel_buffer);
@@ -312,7 +348,7 @@ EFI_STATUS EFIAPI UefiMain(
   }
 
   CopyLoadSegments(kernel_ehdr);
-  Print(L"Kernel: 0x%0lx - 0x%0lx\n", kernel_first_addr, kernel_last_addr);
+//   Print(L"Kernel: 0x%0lx - 0x%0lx\n", kernel_first_addr, kernel_last_addr);
 
   status = gBS->FreePool(kernel_buffer);
   if (EFI_ERROR(status)) {
@@ -355,9 +391,9 @@ EFI_STATUS EFIAPI UefiMain(
       Halt();
   }
 
-  typedef void EntryPointType(const struct FrameBufferConfig*);
-  EntryPointType* entry_point = (EntryPointType*)entry_addr;
-  entry_point(&config);
+  typedef void EntryPointType(const struct FrameBufferConfig *, const UINT8*);
+  EntryPointType *entry_point = (EntryPointType *)entry_addr;
+  entry_point(&config, font_pool);
 
   Print(L"All done\n");
 

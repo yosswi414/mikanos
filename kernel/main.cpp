@@ -45,7 +45,10 @@ int printk(const char* format, ...) {
 }
 // #@@range_end(printk)
 
-extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
+uint8_t* font_data_start;
+uint64_t font_data_size;
+
+extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config, uint8_t& font_data) {
   switch (frame_buffer_config.pixel_format) {
     case kPixelRGBResv8BitPerColor:
       pixel_writer = new(pixel_writer_buf)
@@ -57,6 +60,9 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
       break;
   }
 
+  font_data_start = &font_data;
+  font_data_size = (uint64_t)KERNEL_GLYPH_HEIGHT * 128;
+
   for (int x = 0; x < frame_buffer_config.horizontal_resolution; ++x) {
     for (int y = 0; y < frame_buffer_config.vertical_resolution; ++y) {
       pixel_writer->Write(x, y, {255, 255, 255});
@@ -64,7 +70,7 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
   }
 
   // #@@range_begin(new_console)
-  console = new(console_buf) Console{*pixel_writer, {0, 0, 0}, {255, 255, 255}};
+  console = new(console_buf) Console{*pixel_writer, {0, 255, 0}, {0, 0, 0}};
   // #@@range_end(new_console)
 
   // #@@range_begin(use_printk)
