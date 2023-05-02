@@ -17,6 +17,12 @@
 #include "graphics.hpp"
 #include "logger.hpp"
 #include "pci.hpp"
+#include "mouse.hpp"
+#include "usb/memory.hpp"
+#include "usb/device.hpp"
+#include "usb/classdriver/mouse.hpp"
+#include "usb/xhci/xhci.hpp"
+#include "usb/xhci/trb.hpp"
 // #@@range_end(includes)
 
 // void* operator new(size_t size, void *buf) noexcept {
@@ -49,39 +55,42 @@ int printk(const char *format, ...) {
 }
 // #@@range_end(printk)
 
+// [list 6.25, p.156]
+// #@@range_begin(mouse_observer)
+char mouse_cursor_buf[sizeof(MouseCursor)];
+MouseCursor *mouse_cursor;
+
+void MouseObserver(int8_t displacement_x, int8_t displacement_y){
+    mouse_cursor->MoveRelative({displacement_x, displacement_y});
+}
+// #@@range_end(mouse_observer)
+
 const PixelColor kDesktopBGColor{45, 118, 237};
 const PixelColor kDesktopFGColor{255, 255, 255};
 
-// #@@range_begin(mouse_cursor)
-const int kMouseCursorWidth = 15;
-const int kMouseCursorHeight = 24;
-const char mouse_cursor_shape[kMouseCursorHeight][kMouseCursorWidth + 1] = {
-    "@              ",
-    "@@             ",
-    "@.@            ",
-    "@..@           ",
-    "@...@          ",  // 5
-    "@....@         ",
-    "@.....@        ",
-    "@......@       ",
-    "@.......@      ",
-    "@........@     ",  // 10
-    "@.........@    ",
-    "@..........@   ",
-    "@...........@  ",
-    "@............@ ",
-    "@......@@@@@@@@",  // 15
-    "@......@       ",
-    "@....@@.@      ",
-    "@...@ @.@      ",
-    "@..@   @.@     ",
-    "@.@    @.@     ",  // 20
-    "@@      @.@    ",
-    "@       @.@    ",
-    "         @.@   ",
-    "         @@@   "  // 24
-};
-// #@@range_end(mouse_cursor)
+// #@@range_begin(switch_echi2xhci)
+// Intel Panther Point でデフォルトの EHCI 制御から xHCI 制御に切り替える特殊処理
+void SwitchEhci2Xhci(const pci::Device &xhc_dev) {
+    bool intel_ehc_exist = false;
+    for (int i = 0; i < pci::num_device; ++i) {
+        if (pci::devices[i].class_code.Match(0x0cu, 0x03u, 0x20u) /* EHCI */ &&
+            0x8086 == pci::ReadVendorId(pci::devices[i])) {
+            intel_ehc_exist = true;
+            break;
+        }
+    }
+    if (!intel_ehc_exist) {
+        return;
+    }
+    // レジスタ (参考文献[9] 17.1.33 - 17.1.36) (p.154)
+    uint32_t superspeed_ports = pci::ReadConfReg(xhc_dev, 0xdc);  // USB3PRM (SuperSpeed が有効なポートが set されている)
+    pci::WriteConfReg(xhc_dev, 0xd8, superspeed_ports);           // USB3_PSSEN (USB 3.0 Port SuperSpeed Enable: set したポートに対し SuperSpeed が有効になる)
+    uint32_t ehci2xhci_ports = pci::ReadConfReg(xhc_dev, 0xd4);   // XUSB2PRM (xHCI モードが有効なポートが set されている)
+    pci::WriteConfReg(xhc_dev, 0xd0, ehci2xhci_ports);            // XUSB2PR (xHC USB 2.0 Port Routing: 各ビットが USB ポート一つに対応し、set したポートは xHCI モードになる)
+    Log(kDebug, "SwitchEhci2Xhci: SS = %02, xHCI = %02x\n",
+        superspeed_ports, ehci2xhci_ports);
+}
+// #@@range_end(switch_echi2xhci)
 
 uint8_t *font_data_start;
 uint64_t font_data_size;
@@ -115,9 +124,13 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
     console = new (console_buf) Console{*pixel_writer, kDesktopFGColor, kDesktopBGColor};
     // #@@range_end(new_console)
 
-    printk("Welcome to MikanOS! 2023/03/20 rev.002\n");
+    printk("Welcome to MikanOS! 2023/05/02 rev.002\n");
 
     SetLogLevel(kVerbose);
+
+    // #@@range_begin(new_mouse_cursor)
+    mouse_cursor = new (mouse_cursor_buf) MouseCursor{pixel_writer, kDesktopBGColor, {300, 200}};
+    // #@@range_end(new_mouse_cursor)
 
     auto err = pci::ScanAllBus();
     Log(kDebug, "ScanAllBus: %s\n", err.Name());
@@ -151,20 +164,67 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
     const uint64_t xhc_mmio_base = xhc_bar.value & ~static_cast<uint64_t>(0xf);
     Log(kDebug, "xHC mmio_base = %08lx\n", xhc_mmio_base);
 
-    // #@@range_begin(draw_cursor)
-    for (int dy = 0; dy < kMouseCursorHeight; ++dy) {
-        for (int dx = 0; dx < kMouseCursorWidth; ++dx) {
-            switch (mouse_cursor_shape[dy][dx]) {
-                case '@':
-                    pixel_writer->Write(600 + dx, 100 + dy, {0, 0, 0});
-                    break;
-                case '.':
-                    pixel_writer->Write(600 + dx, 100 + dy, {255, 255, 255});
-                    break;
-            }
+
+    // #@@range_begin(init_xhc)
+    // xHCI 規格にしたがったホストコントローラを制御するためのクラス (p.153)
+    usb::xhci::Controller xhc{xhc_mmio_base};
+    if (0x8086 == pci::ReadVendorId(*xhc_dev)) SwitchEhci2Xhci(*xhc_dev);
+    {
+        // xHC がリセットされた後、動作に必要な設定が行われる (p.153)
+        auto err = xhc.Initialize();
+        Log(kDebug, "xhc.Initialize: %s\n", err.Name());
+    }
+    Log(kInfo, "xHC starting\n");
+    xhc.Run();
+    // #@@range_end(init_xhc)
+
+    unsigned long long cnt = 0, ul = 1.6e7;
+    double mul = 1.7;
+    int dx = 1, dy = 1;
+    const int &x = mouse_cursor->getPos().x;
+    const int &y = mouse_cursor->getPos().y;
+
+    while(1){
+        if (++cnt > ul) {
+            cnt = 0;
+            if (x < 0) dx = 1, ul = (double)ul / mul;
+            if (x > kFrameWidth) dx = -1, ul = (double)ul / mul;
+            if (y < 0) dy = 1, ul = (double)ul / mul;
+            if (y > kFrameHeight) dy = -1, ul = (double)ul / mul;
+            mouse_cursor->MoveRelative({dx, dy});
         }
     }
-    // #@@range_end(draw_cursor)
+    
+    
 
+    // [list 6.23, p.155]
+    // // #@@range_begin(configure_port)
+    // usb::HIDMouseDriver::default_observer = MouseObserver;
+
+    // for (int i = 1; i <= xhc.MaxPorts(); ++i){
+    //     auto port = xhc.PortAt(i);
+    //     Log(kDebug, "Port %d: IsConnected=%d\n", i, port.IsConnected());
+    //     if(port.IsConnected()){
+    //         if(auto err = ConfigurePort(xhc, port)){
+    //             Log(kError, "failed to configure port: %s at %s:%d\n", err.Name(), err.File(), err.Line());
+    //             continue;
+    //         }
+    //     }
+    // }
+    // // #@@range_end(configure_port)
+
+    // [list 6.24, p.155]
+    // // #@@range_begin(receive_event)
+    // while (1) {
+    //     if (auto err = ProcessEvent(xhc)) {
+    //         Log(kError, "Error while ProcessEvent: %s at %s:%d\n", err.Name(), err.File(), err.Line());
+    //     }
+    //     }
+    // // #@@range_end(receive_event)
+
+    while (1) __asm__("hlt");
+}
+
+extern "C" void __cxa_pure_virtual(){
     while (1) __asm__("hlt");
 }
