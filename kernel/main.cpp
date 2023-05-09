@@ -148,6 +148,7 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
 
     pci::Device *xhc_dev = nullptr;
     for (int i = 0; i < pci::num_device; ++i) {
+        // all xHCI controllers will have 0x0c, 0x03, 0x30
         if (pci::devices[i].class_code.Match(0x0cu, 0x03u, 0x30u)) {
             xhc_dev = &pci::devices[i];
             if (0x8086 == pci::ReadVendorId(*xhc_dev)) break;
@@ -162,7 +163,8 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
     Log(kDebug, "ReadBar: %s\n", xhc_bar.error.Name());
     // 下位 4 ビットに BAR のフラグがあるので ~0xf でマスクして除去
     const uint64_t xhc_mmio_base = xhc_bar.value & ~static_cast<uint64_t>(0xf);
-    Log(kDebug, "xHC mmio_base = %08lx\n", xhc_mmio_base);
+    Log(kDebug, "xhc_bar = 0x%016lx\n", xhc_bar.value);
+    Log(kDebug, "xHC mmio_base = 0x%08lx\n", xhc_mmio_base);
 
 
     // #@@range_begin(init_xhc)
@@ -178,22 +180,22 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
     xhc.Run();
     // #@@range_end(init_xhc)
 
-    unsigned long long cnt = 0, ul = 1.6e7;
-    double mul = 1.7;
-    int dx = 1, dy = 1;
-    const int &x = mouse_cursor->getPos().x;
-    const int &y = mouse_cursor->getPos().y;
+    // unsigned long long cnt = 0, ul = 1.6e7;
+    // double mul = 1.7;
+    // int dx = 1, dy = 1;
+    // const int &x = mouse_cursor->getPos().x;
+    // const int &y = mouse_cursor->getPos().y;
 
-    while(1){
-        if (++cnt > ul) {
-            cnt = 0;
-            if (x < 0) dx = 1, ul = (double)ul / mul;
-            if (x > kFrameWidth) dx = -1, ul = (double)ul / mul;
-            if (y < 0) dy = 1, ul = (double)ul / mul;
-            if (y > kFrameHeight) dy = -1, ul = (double)ul / mul;
-            mouse_cursor->MoveRelative({dx, dy});
-        }
-    }
+    // while(1){
+    //     if (++cnt > ul) {
+    //         cnt = 0;
+    //         if (x < 0) dx = 1, ul = (double)ul / mul;
+    //         if (x > kFrameWidth) dx = -1, ul = (double)ul / mul;
+    //         if (y < 0) dy = 1, ul = (double)ul / mul;
+    //         if (y > kFrameHeight) dy = -1, ul = (double)ul / mul;
+    //         mouse_cursor->MoveRelative({dx, dy});
+    //     }
+    // }
     
     
 
