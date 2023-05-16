@@ -16,13 +16,13 @@
 #include "frame_buffer_config.hpp"
 #include "graphics.hpp"
 #include "logger.hpp"
-#include "pci.hpp"
 #include "mouse.hpp"
-#include "usb/memory.hpp"
-#include "usb/device.hpp"
+#include "pci.hpp"
 #include "usb/classdriver/mouse.hpp"
-#include "usb/xhci/xhci.hpp"
+#include "usb/device.hpp"
+#include "usb/memory.hpp"
 #include "usb/xhci/trb.hpp"
+#include "usb/xhci/xhci.hpp"
 // #@@range_end(includes)
 
 // void* operator new(size_t size, void *buf) noexcept {
@@ -60,7 +60,7 @@ int printk(const char *format, ...) {
 char mouse_cursor_buf[sizeof(MouseCursor)];
 MouseCursor *mouse_cursor;
 
-void MouseObserver(int8_t displacement_x, int8_t displacement_y){
+void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
     mouse_cursor->MoveRelative({displacement_x, displacement_y});
 }
 // #@@range_end(mouse_observer)
@@ -126,7 +126,7 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
 
     printk("Welcome to MikanOS! 2023/05/02 rev.002\n");
 
-    SetLogLevel(kVerbose);
+    SetLogLevel(kInfo);
 
     // #@@range_begin(new_mouse_cursor)
     mouse_cursor = new (mouse_cursor_buf) MouseCursor{pixel_writer, kDesktopBGColor, {300, 200}};
@@ -166,7 +166,6 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
     Log(kDebug, "xhc_bar = 0x%016lx\n", xhc_bar.value);
     Log(kDebug, "xHC mmio_base = 0x%08lx\n", xhc_mmio_base);
 
-
     // #@@range_begin(init_xhc)
     // xHCI 規格にしたがったホストコントローラを制御するためのクラス (p.153)
     usb::xhci::Controller xhc{xhc_mmio_base};
@@ -196,37 +195,35 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
     //         mouse_cursor->MoveRelative({dx, dy});
     //     }
     // }
-    
-    
 
     // [list 6.23, p.155]
-    // // #@@range_begin(configure_port)
-    // usb::HIDMouseDriver::default_observer = MouseObserver;
+    // #@@range_begin(configure_port)
+    usb::HIDMouseDriver::default_observer = MouseObserver;
 
-    // for (int i = 1; i <= xhc.MaxPorts(); ++i){
-    //     auto port = xhc.PortAt(i);
-    //     Log(kDebug, "Port %d: IsConnected=%d\n", i, port.IsConnected());
-    //     if(port.IsConnected()){
-    //         if(auto err = ConfigurePort(xhc, port)){
-    //             Log(kError, "failed to configure port: %s at %s:%d\n", err.Name(), err.File(), err.Line());
-    //             continue;
-    //         }
-    //     }
-    // }
-    // // #@@range_end(configure_port)
+    for (int i = 1; i <= xhc.MaxPorts(); ++i) {
+        auto port = xhc.PortAt(i);
+        Log(kDebug, "Port %d: IsConnected=%d\n", i, port.IsConnected());
+        if (port.IsConnected()) {
+            if (auto err = ConfigurePort(xhc, port)) {
+                Log(kError, "failed to configure port: %s at %s:%d\n", err.Name(), err.File(), err.Line());
+                continue;
+            }
+        }
+    }
+    // #@@range_end(configure_port)
 
     // [list 6.24, p.155]
-    // // #@@range_begin(receive_event)
-    // while (1) {
-    //     if (auto err = ProcessEvent(xhc)) {
-    //         Log(kError, "Error while ProcessEvent: %s at %s:%d\n", err.Name(), err.File(), err.Line());
-    //     }
-    //     }
-    // // #@@range_end(receive_event)
+    // #@@range_begin(receive_event)
+    while (1) {
+        if (auto err = ProcessEvent(xhc)) {
+            Log(kError, "Error while ProcessEvent: %s at %s:%d\n", err.Name(), err.File(), err.Line());
+        }
+    }
+    // #@@range_end(receive_event)
 
     while (1) __asm__("hlt");
 }
 
-extern "C" void __cxa_pure_virtual(){
+extern "C" void __cxa_pure_virtual() {
     while (1) __asm__("hlt");
 }

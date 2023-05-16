@@ -63,7 +63,7 @@ class Error {
     operator bool() const { return this->code_ != kSuccess; }
     const char* Name() const { return code_names_[static_cast<int>(this->code_)]; }
     const char* File() const { return this->file_; }
-    int line() const { return this->line_; }
+    int Line() const { return this->line_; }
 
   private:
     Code code_;
