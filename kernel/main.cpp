@@ -23,6 +23,8 @@
 #include "usb/memory.hpp"
 #include "usb/xhci/trb.hpp"
 #include "usb/xhci/xhci.hpp"
+#include "interrupt.hpp"
+#include "asmfunc.h"
 // #@@range_end(includes)
 
 // void* operator new(size_t size, void *buf) noexcept {
@@ -92,6 +94,17 @@ void SwitchEhci2Xhci(const pci::Device &xhc_dev) {
 }
 // #@@range_end(switch_echi2xhci)
 
+// #@@range_begin(xhci_handler)
+usb::xhci::Controller *xhc;
+
+__attribute__((interrupt)) void IntHandlerXHCI(InterruptFrame *frame) {
+    while (xhc->PrimaryEventRing()->HasFront()) {
+        if (auto err = ProcessEvent(*xhc)) Log(kError, "Error while ProcessEvent: %s at %s:%d\n", err.Name(), err.File(), err.Line());
+    }
+    interrupt::Controller().NotifyEndOfInterrupt();
+}
+// #@@range_end(xhci_handler)
+
 uint8_t *font_data_start;
 uint64_t font_data_size;
 
@@ -124,7 +137,7 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
     console = new (console_buf) Console{*pixel_writer, kDesktopFGColor, kDesktopBGColor};
     // #@@range_end(new_console)
 
-    printk("Welcome to MikanOS! 2023/05/02 rev.002\n");
+    printk("Welcome to MikanOS! 2023/05/23 rev.001\n");
 
     SetLogLevel(kInfo);
 
@@ -158,6 +171,25 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
         Log(kInfo, "xHC has been found: %d.%d.%d (vend: %04x)\n", xhc_dev->bus, xhc_dev->device, xhc_dev->function, pci::ReadVendorId(*xhc_dev));
     }
 
+    // #@@range_begin(load_idt)
+    const uint16_t cs = GetCS();
+    SetIDTEntry(idt[InterruptVector::kXHCI], MakeIDTAttr(DescriptorType::kInterruptGate, 0),
+                reinterpret_cast<uint64_t>(IntHandlerXHCI), cs);
+    LoadIDT(sizeof(idt) - 1, reinterpret_cast<uintptr_t>(&idt[0]));
+    // #@@range_end(load_idt)
+
+    // [list 7.8, p.170]
+    // bsp: BootStrap Processor
+    // #@@range_begin(configure_msi)
+    // const uint8_t bsp_local_apic_id = interrupt::Controller().GetLAPICID();
+    const uint8_t bsp_local_apic_id = interrupt::Controller().GetLAPICID();
+    pci::ConfigureMSIFixedDestination(
+        *xhc_dev, bsp_local_apic_id,
+        pci::MSITriggerMode::kLevel,
+        pci::MSIDeliveryMode::kFixed,
+        InterruptVector::kXHCI, 0);
+    // #@@range_end(configure_msi)
+
     // PCI デバイス (*xhc_dev) の BAR0 レジスタを読み取る
     const WithError<uint64_t> xhc_bar = pci::ReadBar(*xhc_dev, 0);
     Log(kDebug, "ReadBar: %s\n", xhc_bar.error.Name());
@@ -179,22 +211,12 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
     xhc.Run();
     // #@@range_end(init_xhc)
 
-    // unsigned long long cnt = 0, ul = 1.6e7;
-    // double mul = 1.7;
-    // int dx = 1, dy = 1;
-    // const int &x = mouse_cursor->getPos().x;
-    // const int &y = mouse_cursor->getPos().y;
+    ::xhc = &xhc;
+    __asm__("sti"); // Set Interrupt Flag
 
-    // while(1){
-    //     if (++cnt > ul) {
-    //         cnt = 0;
-    //         if (x < 0) dx = 1, ul = (double)ul / mul;
-    //         if (x > kFrameWidth) dx = -1, ul = (double)ul / mul;
-    //         if (y < 0) dy = 1, ul = (double)ul / mul;
-    //         if (y > kFrameHeight) dy = -1, ul = (double)ul / mul;
-    //         mouse_cursor->MoveRelative({dx, dy});
-    //     }
-    // }
+    Log(kInfo, "GetCS: 0x%08lx\n", GetCS());
+    Log(kInfo, "interrupt::Base: 0x%08lx\n", interrupt::Controller().GetBase());
+    Log(kInfo, "interrupt::LAPIC_ID: %d\n", interrupt::Controller().GetLAPICID());
 
     // [list 6.23, p.155]
     // #@@range_begin(configure_port)
@@ -211,15 +233,6 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
         }
     }
     // #@@range_end(configure_port)
-
-    // [list 6.24, p.155]
-    // #@@range_begin(receive_event)
-    while (1) {
-        if (auto err = ProcessEvent(xhc)) {
-            Log(kError, "Error while ProcessEvent: %s at %s:%d\n", err.Name(), err.File(), err.Line());
-        }
-    }
-    // #@@range_end(receive_event)
 
     while (1) __asm__("hlt");
 }
