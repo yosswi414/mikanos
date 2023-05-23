@@ -11,20 +11,22 @@
 #include <vector>
 
 // #@@range_begin(includes)
+#include "asmfunc.h"
 #include "console.hpp"
 #include "font.hpp"
 #include "frame_buffer_config.hpp"
 #include "graphics.hpp"
+#include "interrupt.hpp"
 #include "logger.hpp"
+#include "memory_map.hpp"
 #include "mouse.hpp"
 #include "pci.hpp"
+#include "queue.hpp"
 #include "usb/classdriver/mouse.hpp"
 #include "usb/device.hpp"
 #include "usb/memory.hpp"
 #include "usb/xhci/trb.hpp"
 #include "usb/xhci/xhci.hpp"
-#include "interrupt.hpp"
-#include "asmfunc.h"
 // #@@range_end(includes)
 
 // void* operator new(size_t size, void *buf) noexcept {
@@ -97,10 +99,19 @@ void SwitchEhci2Xhci(const pci::Device &xhc_dev) {
 // #@@range_begin(xhci_handler)
 usb::xhci::Controller *xhc;
 
+struct Message {
+    enum Type {
+        kInterruptXHCI,
+    } type;
+};
+
+ArrayQueue<Message> *main_queue;
+
 __attribute__((interrupt)) void IntHandlerXHCI(InterruptFrame *frame) {
-    while (xhc->PrimaryEventRing()->HasFront()) {
-        if (auto err = ProcessEvent(*xhc)) Log(kError, "Error while ProcessEvent: %s at %s:%d\n", err.Name(), err.File(), err.Line());
-    }
+    // while (xhc->PrimaryEventRing()->HasFront()) {
+    //     if (auto err = ProcessEvent(*xhc)) Log(kError, "Error while ProcessEvent: %s at %s:%d\n", err.Name(), err.File(), err.Line());
+    // }
+    main_queue->Push(Message{Message::kInterruptXHCI});
     interrupt::Controller().NotifyEndOfInterrupt();
 }
 // #@@range_end(xhci_handler)
@@ -108,7 +119,9 @@ __attribute__((interrupt)) void IntHandlerXHCI(InterruptFrame *frame) {
 uint8_t *font_data_start;
 uint64_t font_data_size;
 
-extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t &font_data) {
+extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config,
+                           const MemoryMap &memory_map,
+                           uint8_t &font_data) {
     switch (frame_buffer_config.pixel_format) {
         case kPixelRGBResv8BitPerColor:
             pixel_writer = new (pixel_writer_buf)
@@ -137,13 +150,42 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
     console = new (console_buf) Console{*pixel_writer, kDesktopFGColor, kDesktopBGColor};
     // #@@range_end(new_console)
 
-    printk("Welcome to MikanOS! 2023/05/23 rev.001\n");
+    printk("Welcome to MikanOS! 2023/05/24 rev.001\n");
 
-    SetLogLevel(kInfo);
+    SetLogLevel(kWarn);
+
+    const std::array available_memory_types{
+        MemoryType::kEfiBootServicesCode,
+        MemoryType::kEfiBootServicesData,
+        MemoryType::kEfiConventionalMemory,
+    };
+
+    // #@@range_begin(print_memory_map)
+    printk("memory_map: %p\n", &memory_map);
+    for (uintptr_t itr = reinterpret_cast<uintptr_t>(memory_map.buffer);
+         itr < reinterpret_cast<uintptr_t>(memory_map.buffer) + memory_map.map_size;
+         itr += memory_map.descriptor_size) {
+        auto desc = reinterpret_cast<MemoryDescriptor *>(itr);
+        for (int i = 0; i < available_memory_types.size(); ++i) {
+            if (desc->type == available_memory_types[i]) {
+                printk("type = %u, phys = %08lx - %08lx, pages = %lu, attr = %08lx\n",
+                       desc->type,
+                       desc->physical_start,
+                       desc->physical_start + desc->number_of_pages * 4096 - 1,
+                       desc->number_of_pages,
+                       desc->attribute);
+            }
+        }
+    }
+    // #@@range_end(print_memory_map)
 
     // #@@range_begin(new_mouse_cursor)
-    mouse_cursor = new (mouse_cursor_buf) MouseCursor{pixel_writer, kDesktopBGColor, {300, 200}};
+    mouse_cursor = new (mouse_cursor_buf) MouseCursor{pixel_writer, kDesktopBGColor, {600, 500}};
     // #@@range_end(new_mouse_cursor)
+
+    std::array<Message, 32> main_queue_data;
+    ArrayQueue<Message> main_queue{main_queue_data};
+    ::main_queue = &main_queue;
 
     auto err = pci::ScanAllBus();
     Log(kDebug, "ScanAllBus: %s\n", err.Name());
@@ -173,7 +215,7 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
 
     // #@@range_begin(load_idt)
     const uint16_t cs = GetCS();
-    SetIDTEntry(idt[InterruptVector::kXHCI], MakeIDTAttr(DescriptorType::kInterruptGate, 0),
+    SetIDTEntry(idt[68], MakeIDTAttr(DescriptorType::kInterruptGate, 0),
                 reinterpret_cast<uint64_t>(IntHandlerXHCI), cs);
     LoadIDT(sizeof(idt) - 1, reinterpret_cast<uintptr_t>(&idt[0]));
     // #@@range_end(load_idt)
@@ -187,7 +229,7 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
         *xhc_dev, bsp_local_apic_id,
         pci::MSITriggerMode::kLevel,
         pci::MSIDeliveryMode::kFixed,
-        InterruptVector::kXHCI, 0);
+        68, 0);
     // #@@range_end(configure_msi)
 
     // PCI デバイス (*xhc_dev) の BAR0 レジスタを読み取る
@@ -212,11 +254,11 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
     // #@@range_end(init_xhc)
 
     ::xhc = &xhc;
-    __asm__("sti"); // Set Interrupt Flag
+    __asm__("sti");  // Set Interrupt Flag
 
-    Log(kInfo, "GetCS: 0x%08lx\n", GetCS());
-    Log(kInfo, "interrupt::Base: 0x%08lx\n", interrupt::Controller().GetBase());
-    Log(kInfo, "interrupt::LAPIC_ID: %d\n", interrupt::Controller().GetLAPICID());
+    Log(kDebug, "GetCS: 0x%08lx\n", GetCS());
+    Log(kDebug, "interrupt::Base: 0x%08lx\n", interrupt::Controller().GetBase());
+    Log(kDebug, "interrupt::LAPIC_ID: %d\n", interrupt::Controller().GetLAPICID());
 
     // [list 6.23, p.155]
     // #@@range_begin(configure_port)
@@ -233,6 +275,34 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config, uint8_t
         }
     }
     // #@@range_end(configure_port)
+
+    // event loop
+    while (true) {
+        __asm__("cli");  // Clear Interrupt Flag
+        if (main_queue.Count() == 0) {
+            /* sti 命令と直後の 1 命令の間では割り込みが起きないという仕様を活用するため
+             * sti と hlt を並べることが肝要
+             */
+            __asm__("sti\n\thlt");
+            continue;
+        }
+
+        Message msg = main_queue.Front();
+        main_queue.Pop();
+        __asm__("sti");
+
+        switch (msg.type) {
+            case Message::kInterruptXHCI:
+                while (xhc.PrimaryEventRing()->HasFront()) {
+                    if (auto err = ProcessEvent(xhc)) {
+                        Log(kError, "Error while ProcessEvent: %s at %s:%d\n", err.Name(), err.File(), err.Line());
+                    }
+                }
+                break;
+            default:
+                Log(kError, "Unknown message type: %d\n", msg.type);
+        }
+    }
 
     while (1) __asm__("hlt");
 }

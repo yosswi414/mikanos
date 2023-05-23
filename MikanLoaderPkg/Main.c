@@ -264,7 +264,8 @@ EFI_STATUS EFIAPI UefiMain(
     UINT32* screen = (UINT32*)frame_buffer;
 
     // extract UEFI system font and save them into font_pool
-    UINT8* font_pool;
+    typedef UINT8* FontBitmapData;
+    FontBitmapData font_pool;
     status = gBS->AllocatePool(EfiLoaderData, EFI_GLYPH_WIDTH * EFI_GLYPH_HEIGHT * 128, (VOID**)&font_pool);
     if (EFI_ERROR(status)) {
         Print(L"failed to allocate font_pool: %r\n", status);
@@ -376,9 +377,11 @@ EFI_STATUS EFIAPI UefiMain(
             Halt();
     }
 
-    typedef void EntryPointType(const struct FrameBufferConfig*, const UINT8*);  // UINT8* for font_pool
+    typedef void EntryPointType(const struct FrameBufferConfig*,
+                                const struct MemoryMap*,
+                                const FontBitmapData);  // UINT8* for font_pool
     EntryPointType* entry_point = (EntryPointType*)entry_addr;
-    entry_point(&config, font_pool);
+    entry_point(&config, &memmap, font_pool);
 
     Print(L"All done\n");
 
