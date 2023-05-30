@@ -27,6 +27,7 @@
 #include "usb/memory.hpp"
 #include "usb/xhci/trb.hpp"
 #include "usb/xhci/xhci.hpp"
+#include "segment.hpp"
 // #@@range_end(includes)
 
 // void* operator new(size_t size, void *buf) noexcept {
@@ -116,12 +117,26 @@ __attribute__((interrupt)) void IntHandlerXHCI(InterruptFrame *frame) {
 }
 // #@@range_end(xhci_handler)
 
-uint8_t *font_data_start;
-uint64_t font_data_size;
+alignas(16) uint8_t font_data[128][KERNEL_GLYPH_HEIGHT];
+// uint64_t font_data_size;
 
-extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config,
-                           const MemoryMap &memory_map,
-                           uint8_t &font_data) {
+alignas(16) uint8_t kernel_main_stack[1024 * 1024];
+
+extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_ref,
+                                   const MemoryMap &memory_map_ref,
+                                   uint8_t* font_data_ref) {
+    FrameBufferConfig frame_buffer_config{frame_buffer_config_ref};
+    MemoryMap memory_map{memory_map_ref};
+
+    // font_data_start = font_data;
+    // font_data_size = (uint64_t)KERNEL_GLYPH_HEIGHT * 128; // 128: ascii 0x00 - 0x7f
+
+    for (int i = 0; i < 0x80; ++i) {
+        for (int j = 0; j < KERNEL_GLYPH_HEIGHT; ++j) {
+            font_data[i][j] = *font_data_ref++;
+        }
+    }
+
     switch (frame_buffer_config.pixel_format) {
         case kPixelRGBResv8BitPerColor:
             pixel_writer = new (pixel_writer_buf)
@@ -136,9 +151,6 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config,
     const int kFrameHeight = frame_buffer_config.vertical_resolution;
     const int kFrameWidth = frame_buffer_config.horizontal_resolution;
 
-    font_data_start = &font_data;
-    font_data_size = (uint64_t)KERNEL_GLYPH_HEIGHT * 128;
-
     // #@@range_begin(draw_desktop)
     FillRectangle(*pixel_writer, {0, 0}, {kFrameWidth, kFrameHeight - 50}, kDesktopBGColor);
     FillRectangle(*pixel_writer, {0, kFrameHeight - 50}, {kFrameWidth, 50}, {1, 8, 17});
@@ -150,7 +162,7 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config,
     console = new (console_buf) Console{*pixel_writer, kDesktopFGColor, kDesktopBGColor};
     // #@@range_end(new_console)
 
-    printk("Welcome to MikanOS! 2023/05/24 rev.001\n");
+    printk("Welcome to MikanOS! 2023/05/30 rev.001\n");
 
     SetLogLevel(kWarn);
 
@@ -275,6 +287,15 @@ extern "C" void KernelMain(const FrameBufferConfig &frame_buffer_config,
         }
     }
     // #@@range_end(configure_port)
+
+    SetupSegments();
+
+    const uint16_t kernel_cs = 1 << 3;
+    const uint16_t kernel_ss = 2 << 3;
+    SetDSAll(0);
+    SetCSSS(kernel_cs, kernel_ss);
+
+    SetupIdentityPageTable();
 
     // event loop
     while (true) {

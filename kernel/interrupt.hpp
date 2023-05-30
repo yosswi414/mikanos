@@ -9,19 +9,8 @@
 #include <array>
 #include <cstdint>
 
-#include "register.hpp"
+#include "x86_descriptor.hpp"
 
-// #@@range_begin(desc_types)
-enum class DescriptorType {
-    kUpper8Bytes = 0,
-    kLDT = 2,
-    kTSSAvailable = 9,
-    kTSSBusy = 11,
-    kCallGate = 12,
-    kInterruptGate = 14,
-    kTrapGate = 15,
-};
-// #@@range_end(desc_types)
 
 // #@@range_begin(descriptor_attr_struct)
 union InterruptDescriptorAttribute {
