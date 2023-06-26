@@ -194,17 +194,20 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
          itr < memory_map_base + memory_map.map_size;
          itr += memory_map.descriptor_size) {
         auto desc = reinterpret_cast<MemoryDescriptor *>(itr);
-        for (int i = 0; i < available_memory_types.size(); ++i) {
-            if (desc->type == available_memory_types[i]) {
-                Log(kDebug, "type = %u, phys = %08lx - %08lx, pages = %lu, attr = %08lx\n",
-                       desc->type,
-                       desc->physical_start,
-                       desc->physical_start + desc->number_of_pages * 4096 - 1,
-                       desc->number_of_pages,
-                       desc->attribute);
-            }
+        if(IsAvailable(static_cast<MemoryType>(desc->type))){
+
+        
+        // for (int i = 0; i < available_memory_types.size(); ++i) {
+        //     if (desc->type == available_memory_types[i]) {
+            Log(kDebug, "type = %u, phys = %08lx - %08lx, pages = %lu, attr = %08lx\n",
+                    desc->type,
+                    desc->physical_start,
+                    desc->physical_start + desc->number_of_pages * 4096 - 1,
+                    desc->number_of_pages,
+                    desc->attribute);
         }
     }
+    
     // #@@range_end(print_memory_map)
 
     // #@@range_begin(new_mouse_cursor)

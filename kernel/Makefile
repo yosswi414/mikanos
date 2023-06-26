@@ -4,8 +4,7 @@ OBJS = main.o graphics.o font.o newlib_support.o console.o pci.o asmfunc.o logge
 	usb/xhci/port.o usb/xhci/device.o usb/xhci/devmgr.o usb/xhci/registers.o \
 	usb/classdriver/base.o usb/classdriver/hid.o usb/classdriver/keyboard.o \
 	usb/classdriver/mouse.o \
-	interrupt.o \
-	segment.o paging.o
+	interrupt.o segment.o paging.o
 DEPENDS = $(join $(dir $(OBJS)),$(addprefix .,$(notdir $(OBJS:.o=.d))))
 
 BASE = /home/yosswi414/mikanOS
