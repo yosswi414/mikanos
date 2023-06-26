@@ -45,8 +45,8 @@ void SetDataSegment(SegmentDescriptor& desc,
 }
 
 void SetupSegments(){
-    gdt[0].data = 0; // null descriptor gdt[0] will not be used (p.190)
-    SetCodeSegment(gdt[1], DescriptorType::kExecuteRead, 0, 0, 0xfffff);
-    SetCodeSegment(gdt[2], DescriptorType::kReadWrite, 0, 0, 0xfffff);
+    gdt[0].data = 0; // null descriptor gdt[0] should be filled with 0 (p.190)
+    SetCodeSegment(gdt[1], DescriptorType::kExecuteRead, 0, 0, 0xfffff);    // code segment descriptor
+    SetCodeSegment(gdt[2], DescriptorType::kReadWrite, 0, 0, 0xfffff);      // data segment descriptor
     LoadGDT(sizeof(gdt) - 1, reinterpret_cast<uintptr_t>(&gdt[0]));
 }

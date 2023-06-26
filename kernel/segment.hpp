@@ -19,7 +19,7 @@ union SegmentDescriptor {
         uint64_t available : 1;                     // single bit which OS can handle
         uint64_t long_mode : 1;                     // 1: code segment for 64-bit
         uint64_t default_operation_size : 1;        // should be 0 if long_mode == 1
-        uint64_t granularity : 1;                   // 1: interpret limit as the number of 4KiB blocks
+        uint64_t granularity : 1;                   // 1: interpret limit as the number of 4KiB blocks (ignored in 64-bit mode)
         uint64_t base_high : 8;
     } __attribute__((packed)) bits;
 } __attribute__((packed));

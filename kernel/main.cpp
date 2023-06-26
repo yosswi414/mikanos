@@ -10,7 +10,6 @@
 #include <numeric>
 #include <vector>
 
-// #@@range_begin(includes)
 #include "asmfunc.h"
 #include "console.hpp"
 #include "font.hpp"
@@ -28,14 +27,17 @@
 #include "usb/xhci/trb.hpp"
 #include "usb/xhci/xhci.hpp"
 #include "segment.hpp"
-// #@@range_end(includes)
+#include "paging.hpp"
 
 // void* operator new(size_t size, void *buf) noexcept {
 //     return buf;
 // }
 
-void operator delete(void *obj) noexcept {
-}
+// void operator delete(void *obj) noexcept {
+// }
+
+const PixelColor kDesktopBGColor{45, 118, 237};
+const PixelColor kDesktopFGColor{255, 255, 255};
 
 char pixel_writer_buf[sizeof(RGBResv8BitPerColorPixelWriter)];
 PixelWriter *pixel_writer;
@@ -70,8 +72,7 @@ void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
 }
 // #@@range_end(mouse_observer)
 
-const PixelColor kDesktopBGColor{45, 118, 237};
-const PixelColor kDesktopFGColor{255, 255, 255};
+
 
 // #@@range_begin(switch_echi2xhci)
 // Intel Panther Point でデフォルトの EHCI 制御から xHCI 制御に切り替える特殊処理
@@ -162,9 +163,23 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     console = new (console_buf) Console{*pixel_writer, kDesktopFGColor, kDesktopBGColor};
     // #@@range_end(new_console)
 
-    printk("Welcome to MikanOS! 2023/05/30 rev.001\n");
+    printk("Welcome to MikanOS! 2023/06/27 rev.001\n");
 
-    SetLogLevel(kWarn);
+    SetLogLevel(kInfo);
+
+    Log(kInfo, "GetCS: 0x%08lx\n", GetCS());
+
+    SetupSegments();
+
+    const uint16_t kernel_cs = 1 << 3;  // points to gdt[1]: code segment
+    const uint16_t kernel_ss = 2 << 3;  // points to gdt[2]: data segment
+    SetDSAll(0);                        // point to null descriptor gdt[0]; DS and ES won't be used in x86-64 64-bit mode
+                                        // and FS, GS too unless explicitly used by programmer (p.193)
+    SetCSSS(kernel_cs, kernel_ss);
+
+    Log(kInfo, "GetCS: 0x%08lx\n", GetCS());
+
+    SetupIdentityPageTable();
 
     const std::array available_memory_types{
         MemoryType::kEfiBootServicesCode,
@@ -174,13 +189,14 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
 
     // #@@range_begin(print_memory_map)
     printk("memory_map: %p\n", &memory_map);
-    for (uintptr_t itr = reinterpret_cast<uintptr_t>(memory_map.buffer);
-         itr < reinterpret_cast<uintptr_t>(memory_map.buffer) + memory_map.map_size;
+    const auto memory_map_base = reinterpret_cast<uintptr_t>(memory_map.buffer);
+    for (uintptr_t itr = memory_map_base;
+         itr < memory_map_base + memory_map.map_size;
          itr += memory_map.descriptor_size) {
         auto desc = reinterpret_cast<MemoryDescriptor *>(itr);
         for (int i = 0; i < available_memory_types.size(); ++i) {
             if (desc->type == available_memory_types[i]) {
-                printk("type = %u, phys = %08lx - %08lx, pages = %lu, attr = %08lx\n",
+                Log(kDebug, "type = %u, phys = %08lx - %08lx, pages = %lu, attr = %08lx\n",
                        desc->type,
                        desc->physical_start,
                        desc->physical_start + desc->number_of_pages * 4096 - 1,
@@ -226,9 +242,8 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     }
 
     // #@@range_begin(load_idt)
-    const uint16_t cs = GetCS();
-    SetIDTEntry(idt[68], MakeIDTAttr(DescriptorType::kInterruptGate, 0),
-                reinterpret_cast<uint64_t>(IntHandlerXHCI), cs);
+    SetIDTEntry(idt[InterruptVector::kXHCI], MakeIDTAttr(DescriptorType::kInterruptGate, 0),
+                reinterpret_cast<uint64_t>(IntHandlerXHCI), kernel_cs);
     LoadIDT(sizeof(idt) - 1, reinterpret_cast<uintptr_t>(&idt[0]));
     // #@@range_end(load_idt)
 
@@ -266,11 +281,11 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     // #@@range_end(init_xhc)
 
     ::xhc = &xhc;
-    __asm__("sti");  // Set Interrupt Flag
+    
 
-    Log(kDebug, "GetCS: 0x%08lx\n", GetCS());
-    Log(kDebug, "interrupt::Base: 0x%08lx\n", interrupt::Controller().GetBase());
-    Log(kDebug, "interrupt::LAPIC_ID: %d\n", interrupt::Controller().GetLAPICID());
+    // Log(kInfo, "GetCS: 0x%08lx\n", GetCS());
+    // Log(kInfo, "interrupt::Base: 0x%08lx\n", interrupt::Controller().GetBase());
+    // Log(kInfo, "interrupt::LAPIC_ID: %d\n", interrupt::Controller().GetLAPICID());
 
     // [list 6.23, p.155]
     // #@@range_begin(configure_port)
@@ -288,14 +303,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     }
     // #@@range_end(configure_port)
 
-    SetupSegments();
-
-    const uint16_t kernel_cs = 1 << 3;
-    const uint16_t kernel_ss = 2 << 3;
-    SetDSAll(0);
-    SetCSSS(kernel_cs, kernel_ss);
-
-    SetupIdentityPageTable();
+    __asm__("sti");  // Set Interrupt Flag
 
     // event loop
     while (true) {
