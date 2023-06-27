@@ -171,6 +171,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
 
     SetupSegments();
 
+    // kernel_cs: also referred in call of SetIDTEntry() in this routine
     const uint16_t kernel_cs = 1 << 3;  // points to gdt[1]: code segment
     const uint16_t kernel_ss = 2 << 3;  // points to gdt[2]: data segment
     SetDSAll(0);                        // point to null descriptor gdt[0]; DS and ES won't be used in x86-64 64-bit mode
@@ -245,8 +246,12 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     }
 
     // #@@range_begin(load_idt)
+    // SetIDTEntry(idt[68], MakeIDTAttr(DescriptorType::kInterruptGate, 0),
+    //             reinterpret_cast<uint64_t>(IntHandlerXHCI), kernel_cs);
     SetIDTEntry(idt[InterruptVector::kXHCI], MakeIDTAttr(DescriptorType::kInterruptGate, 0),
                 reinterpret_cast<uint64_t>(IntHandlerXHCI), kernel_cs);
+    // SetIDTEntry(idt[68], MakeIDTAttr(DescriptorType::kInterruptGate, 0),
+    //             reinterpret_cast<uint64_t>(IntHandlerXHCI), GetCS());
     LoadIDT(sizeof(idt) - 1, reinterpret_cast<uintptr_t>(&idt[0]));
     // #@@range_end(load_idt)
 
@@ -259,7 +264,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
         *xhc_dev, bsp_local_apic_id,
         pci::MSITriggerMode::kLevel,
         pci::MSIDeliveryMode::kFixed,
-        68, 0);
+        InterruptVector::kXHCI, 0);
     // #@@range_end(configure_msi)
 
     // PCI デバイス (*xhc_dev) の BAR0 レジスタを読み取る
