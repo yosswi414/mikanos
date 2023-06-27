@@ -1,0 +1,9 @@
+*.img
+*.efi
+*.EFI
+*.elf
+memmap
+*.lst
+*.o
+*.d
+*.bin

@@ -28,6 +28,7 @@
 #include "usb/xhci/xhci.hpp"
 #include "segment.hpp"
 #include "paging.hpp"
+#include "memory_manager.hpp"
 
 // void* operator new(size_t size, void *buf) noexcept {
 //     return buf;
@@ -61,6 +62,9 @@ int printk(const char *format, ...) {
     return result;
 }
 // #@@range_end(printk)
+
+char memory_manager_buf[sizeof(BitmapMemoryManager)];
+BitmapMemoryManager *memory_manager;
 
 // [list 6.25, p.156]
 // #@@range_begin(mouse_observer)
@@ -163,7 +167,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     console = new (console_buf) Console{*pixel_writer, kDesktopFGColor, kDesktopBGColor};
     // #@@range_end(new_console)
 
-    printk("Welcome to MikanOS! 2023/06/27 rev.001\n");
+    printk("Welcome to MikanOS! 2023/06/28 rev.001\n");
 
     SetLogLevel(kInfo);
 
@@ -182,34 +186,54 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
 
     SetupIdentityPageTable();
 
+    // #@@range_begin(mark_allocated)
+    ::memory_manager = new (memory_manager_buf) BitmapMemoryManager;
+
+    // #@@range_begin(print_memory_map)
+    // printk("memory_map: %p\n", &memory_map);
+    // assuming identity mapping
+    const auto memory_map_base = reinterpret_cast<uintptr_t>(memory_map.buffer);
+    uintptr_t available_end = 0;
+    for (uintptr_t itr = memory_map_base;
+         itr < memory_map_base + memory_map.map_size;
+         itr += memory_map.descriptor_size) {
+        auto desc = reinterpret_cast<const MemoryDescriptor *>(itr);
+        
+
+        if (available_end < desc->physical_start) {
+            memory_manager->MarkAllocated(
+                FrameID{available_end / kBytesPerFrame},
+                (desc->physical_start - available_end) / kBytesPerFrame);
+        }
+
+        const auto physical_end = desc->physical_start + desc->number_of_pages * kUEFIPageSize;
+        if (IsAvailable(static_cast<MemoryType>(desc->type))) {
+            available_end = physical_end;
+            Log(kDebug, "type = %u, phys = %08lx - %08lx, pages = %lu, attr = %08lx\n",
+                desc->type,
+                desc->physical_start,
+                desc->physical_start + desc->number_of_pages * 4096 - 1,
+                desc->number_of_pages,
+                desc->attribute);
+        }
+        else{
+            memory_manager->MarkAllocated(
+                FrameID{desc->physical_start / kBytesPerFrame},
+                desc->number_of_pages * kUEFIPageSize / kBytesPerFrame);
+        }
+    }
+    memory_manager->SetMemoryRange(FrameID{1}, FrameID{available_end / kBytesPerFrame});
+
+    Log(kInfo, "memory frame ids: 1 to %d (0x%lx)\n", available_end / kBytesPerFrame, available_end / kBytesPerFrame);
+    Log(kInfo, "memory capacity: %d MiB\n", available_end / kBytesPerFrame / 256);
+    // #@@range_end(mark_allocated)
+
     const std::array available_memory_types{
         MemoryType::kEfiBootServicesCode,
         MemoryType::kEfiBootServicesData,
         MemoryType::kEfiConventionalMemory,
     };
 
-    // #@@range_begin(print_memory_map)
-    printk("memory_map: %p\n", &memory_map);
-    const auto memory_map_base = reinterpret_cast<uintptr_t>(memory_map.buffer);
-    for (uintptr_t itr = memory_map_base;
-         itr < memory_map_base + memory_map.map_size;
-         itr += memory_map.descriptor_size) {
-        auto desc = reinterpret_cast<MemoryDescriptor *>(itr);
-        if(IsAvailable(static_cast<MemoryType>(desc->type))){
-
-        
-        // for (int i = 0; i < available_memory_types.size(); ++i) {
-        //     if (desc->type == available_memory_types[i]) {
-            Log(kDebug, "type = %u, phys = %08lx - %08lx, pages = %lu, attr = %08lx\n",
-                    desc->type,
-                    desc->physical_start,
-                    desc->physical_start + desc->number_of_pages * 4096 - 1,
-                    desc->number_of_pages,
-                    desc->attribute);
-        }
-    }
-    
-    // #@@range_end(print_memory_map)
 
     // #@@range_begin(new_mouse_cursor)
     mouse_cursor = new (mouse_cursor_buf) MouseCursor{pixel_writer, kDesktopBGColor, {600, 500}};
