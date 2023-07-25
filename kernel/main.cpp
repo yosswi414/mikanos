@@ -167,11 +167,11 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     console = new (console_buf) Console{*pixel_writer, kDesktopFGColor, kDesktopBGColor};
     // #@@range_end(new_console)
 
-    printk("Welcome to MikanOS! 2023/06/28 rev.001\n");
+    printk("Welcome to MikanOS! 2023/07/26 rev.001\n");
 
     SetLogLevel(kInfo);
 
-    Log(kInfo, "GetCS: 0x%08lx\n", GetCS());
+    // Log(kInfo, "GetCS: 0x%08lx\n", GetCS());
 
     SetupSegments();
 
@@ -182,7 +182,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
                                         // and FS, GS too unless explicitly used by programmer (p.193)
     SetCSSS(kernel_cs, kernel_ss);
 
-    Log(kInfo, "GetCS: 0x%08lx\n", GetCS());
+    // Log(kInfo, "GetCS: 0x%08lx\n", GetCS());
 
     SetupIdentityPageTable();
 
@@ -209,10 +209,10 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
         const auto physical_end = desc->physical_start + desc->number_of_pages * kUEFIPageSize;
         if (IsAvailable(static_cast<MemoryType>(desc->type))) {
             available_end = physical_end;
-            Log(kDebug, "type = %u, phys = %08lx - %08lx, pages = %lu, attr = %08lx\n",
+            Log(kInfo, "type = %u, phys = %08lx - %08lx, pages = %lu,\tattr = %016llx\n",
                 desc->type,
                 desc->physical_start,
-                desc->physical_start + desc->number_of_pages * 4096 - 1,
+                desc->physical_start + desc->number_of_pages * kUEFIPageSize - 1,
                 desc->number_of_pages,
                 desc->attribute);
         }
@@ -224,8 +224,13 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     }
     memory_manager->SetMemoryRange(FrameID{1}, FrameID{available_end / kBytesPerFrame});
 
-    Log(kInfo, "memory frame ids: 1 to %d (0x%lx)\n", available_end / kBytesPerFrame, available_end / kBytesPerFrame);
-    Log(kInfo, "memory capacity: %d MiB\n", available_end / kBytesPerFrame / 256);
+    if(auto err = InitializeHeap(*memory_manager)){
+        Log(kError, "failed to allocate pages: %s at %s:%d\n", err.Name(), err.File(), err.Line());
+        exit(1);
+    }
+
+    Log(kDebug, "memory frame ids: 1 to %d (0x%lx)\n", available_end / kBytesPerFrame, available_end / kBytesPerFrame);
+    Log(kInfo, "memory capacity: %d MiB\n", available_end / (1_MiB));
     // #@@range_end(mark_allocated)
 
     const std::array available_memory_types{
