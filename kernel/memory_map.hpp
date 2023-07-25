@@ -27,6 +27,8 @@ enum class MemoryType {
     kEfiLoaderData,
     kEfiBootServicesCode,
     kEfiBootServicesData,
+    kEfiRuntimeServicesCode,
+    kEfiRuntimeServicesData,
     kEfiConventionalMemory,
     kEfiUnusableMemory,
     kEfiACPIReclaimMemory,
