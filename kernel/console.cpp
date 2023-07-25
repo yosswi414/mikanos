@@ -22,6 +22,14 @@ void Console::PutString(const char* s) {
   while (*s) {
     if (*s == '\n') {
       Newline();
+    } else if(*s == '\t'){ // this implementation could be naive
+      do {
+        if (cursor_column_ >= kColumns) {
+          Newline();
+          break;
+        }
+        buffer_[cursor_row_][cursor_column_++] = ' ';
+      } while (cursor_column_ % KERNEL_TAB_WIDTH > 0);
     } else if (cursor_column_ < kColumns - 1) {
       WriteAscii(writer_, KERNEL_GLYPH_WIDTH * cursor_column_, KERNEL_GLYPH_HEIGHT * cursor_row_, *s, fg_color_);
       buffer_[cursor_row_][cursor_column_] = *s;
