@@ -7,5 +7,5 @@
 #define KERNEL_GLYPH_WIDTH  (8)
 #define KERNEL_TAB_WIDTH    (4)
 
-void WriteAscii(PixelWriter& writer, int x, int y, char c, const PixelColor& color);
-void WriteString(PixelWriter& writer, int x, int y, const char* s, const PixelColor& color);
+void WriteAscii(PixelWriter& writer, Vector2D<int> pos, char c, const PixelColor& color);
+void WriteString(PixelWriter& writer, Vector2D<int> pos, const char* s, const PixelColor& color);
