@@ -38,8 +38,7 @@ void Console::PutString(const char* s) {
                 buffer_[cursor_row_][cursor_column_++] = ' ';
             } while (cursor_column_ % KERNEL_TAB_WIDTH > 0);
         } else if (cursor_column_ < kColumns - 1) {
-            // WriteAscii(writer_, KERNEL_GLYPH_WIDTH * cursor_column_, KERNEL_GLYPH_HEIGHT * cursor_row_, *s, fg_color_);
-            WriteAscii(*writer_, {KERNEL_GLYPH_WIDTH * cursor_column_, KERNEL_GLYPH_HEIGHT * cursor_row_}, *s, fg_color_);
+            WriteAscii(*writer_, Vector2D<int>{KERNEL_GLYPH_WIDTH * cursor_column_, KERNEL_GLYPH_HEIGHT * cursor_row_}, *s, fg_color_);
             buffer_[cursor_row_][cursor_column_] = *s;
             ++cursor_column_;
         }
@@ -106,6 +105,6 @@ void Console::Newline() {
 
 void Console::Refresh() {
     for (int row = 0; row < kRows; ++row) {
-        WriteString(*writer_, {0, 16 * row}, buffer_[row], fg_color_);
+        WriteString(*writer_, {0, KERNEL_GLYPH_HEIGHT * row}, buffer_[row], fg_color_);
     }
 }

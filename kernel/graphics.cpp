@@ -37,7 +37,7 @@ void DrawRectangle(PixelWriter& writer, const Vector2D<int>& pos,
         writer.Write(pos + Vector2D<int>{dx, 0}, c);
         writer.Write(pos + Vector2D<int>{dx, size.y - 1}, c);
     }
-    for (int dy = 0; dy < size.y; ++dy){
+    for (int dy = 1; dy < size.y - 1; ++dy){
         writer.Write(pos + Vector2D<int>{0, dy}, c);
         writer.Write(pos + Vector2D<int>{size.x - 1, dy}, c);
     }

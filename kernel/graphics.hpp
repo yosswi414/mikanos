@@ -47,7 +47,6 @@ struct Rectangle {
 
 class PixelWriter {
   public:
-    
     virtual ~PixelWriter() = default;
     virtual void Write(Vector2D<int> pos, const PixelColor& c) = 0;
     virtual int Width() const = 0;
@@ -63,7 +62,8 @@ class FrameBufferWriter : public PixelWriter{
 
   protected:
     uint8_t* PixelAt(Vector2D<int> pos) {
-        return config_.frame_buffer + 4 * (config_.pixels_per_scan_line * pos.y + pos.x);
+        const int PIXEL_SIZE = 4; // RGBResv 8-bit color -> 32 bits
+        return config_.frame_buffer + PIXEL_SIZE * (config_.pixels_per_scan_line * pos.y + pos.x);
     }
 
   private:

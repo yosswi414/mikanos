@@ -91,6 +91,7 @@ void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
 
     auto elapsed = LAPICTimerElapsed();
     StopLAPICTimer();
+    
     printk("MouseObserver: elapsed = %u\n", elapsed);
 }
 // #@@range_end(mouse_observer)
@@ -177,7 +178,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     console = new (console_buf) Console{kDesktopFGColor, kDesktopBGColor};
     console->SetWriter(pixel_writer);
 
-    printk("Welcome to MikanOS! 2023/07/26 rev.001\n");
+    printk("Welcome to MikanOS! 2023/08/06 rev.001\n");
 
     SetLogLevel(kInfo);
 
@@ -359,7 +360,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     auto bgwriter = bgwindow->Writer();
 
     DrawDesktop(*bgwriter);
-    // console->SetWriter(bgwriter);
     console->SetWindow(bgwindow);
 
     auto mouse_window = std::make_shared<Window>(kMouseCursorWidth, kMouseCursorHeight, frame_buffer_config.pixel_format);
@@ -419,8 +419,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
                 Log(kError, "Unknown message type: %d\n", msg.type);
         }
     }
-
-    while (1) __asm__("hlt");
 }
 
 extern "C" void __cxa_pure_virtual() {
