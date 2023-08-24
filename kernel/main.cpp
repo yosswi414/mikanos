@@ -80,6 +80,7 @@ BitmapMemoryManager *memory_manager;
 // MouseCursor *mouse_cursor;
 unsigned int mouse_layer_id;
 
+
 void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
     // mouse_cursor->MoveRelative({displacement_x, displacement_y});
     layer_manager->MoveRelative(mouse_layer_id, {displacement_x, displacement_y});
@@ -91,8 +92,11 @@ void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
 
     auto elapsed = LAPICTimerElapsed();
     StopLAPICTimer();
-    
-    printk("MouseObserver: elapsed = %u\n", elapsed);
+    static int mx = 200, my = 200, cMouse = 0;
+    mx += displacement_x;
+    my += displacement_y;
+    (++cMouse) %= 5;
+    if(!cMouse) printk("MouseObserver: elapsed = %u\t(%d,%d)\n", elapsed, mx, my);
 }
 // #@@range_end(mouse_observer)
 
@@ -287,27 +291,19 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
         Log(kInfo, "xHC has been found: %d.%d.%d (vend: %04x)\n", xhc_dev->bus, xhc_dev->device, xhc_dev->function, pci::ReadVendorId(*xhc_dev));
     }
 
-    // #@@range_begin(load_idt)
-    // SetIDTEntry(idt[68], MakeIDTAttr(DescriptorType::kInterruptGate, 0),
-    //             reinterpret_cast<uint64_t>(IntHandlerXHCI), kernel_cs);
+    
     SetIDTEntry(idt[InterruptVector::kXHCI], MakeIDTAttr(DescriptorType::kInterruptGate, 0),
                 reinterpret_cast<uint64_t>(IntHandlerXHCI), kernel_cs);
-    // SetIDTEntry(idt[68], MakeIDTAttr(DescriptorType::kInterruptGate, 0),
-    //             reinterpret_cast<uint64_t>(IntHandlerXHCI), GetCS());
     LoadIDT(sizeof(idt) - 1, reinterpret_cast<uintptr_t>(&idt[0]));
-    // #@@range_end(load_idt)
 
     // [list 7.8, p.170]
     // bsp: BootStrap Processor
-    // #@@range_begin(configure_msi)
-    // const uint8_t bsp_local_apic_id = interrupt::Controller().GetLAPICID();
     const uint8_t bsp_local_apic_id = interrupt::Controller().GetLAPICID();
     pci::ConfigureMSIFixedDestination(
         *xhc_dev, bsp_local_apic_id,
         pci::MSITriggerMode::kLevel,
         pci::MSIDeliveryMode::kFixed,
         InterruptVector::kXHCI, 0);
-    // #@@range_end(configure_msi)
 
     // PCI デバイス (*xhc_dev) の BAR0 レジスタを読み取る
     const WithError<uint64_t> xhc_bar = pci::ReadBar(*xhc_dev, 0);
@@ -317,7 +313,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     Log(kDebug, "xhc_bar = 0x%016lx\n", xhc_bar.value);
     Log(kDebug, "xHC mmio_base = 0x%08lx\n", xhc_mmio_base);
 
-    // #@@range_begin(init_xhc)
     // xHCI 規格にしたがったホストコントローラを制御するためのクラス (p.153)
     usb::xhci::Controller xhc{xhc_mmio_base};
     if (0x8086 == pci::ReadVendorId(*xhc_dev)) SwitchEhci2Xhci(*xhc_dev);
@@ -328,15 +323,9 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     }
     Log(kInfo, "xHC starting\n");
     xhc.Run();
-    // #@@range_end(init_xhc)
 
     ::xhc = &xhc;
     
-
-    // Log(kInfo, "GetCS: 0x%08lx\n", GetCS());
-    // Log(kInfo, "interrupt::Base: 0x%08lx\n", interrupt::Controller().GetBase());
-    // Log(kInfo, "interrupt::LAPIC_ID: %d\n", interrupt::Controller().GetLAPICID());
-
     // [list 6.23, p.155]
     // #@@range_begin(configure_port)
     usb::HIDMouseDriver::default_observer = MouseObserver;

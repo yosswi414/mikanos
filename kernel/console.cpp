@@ -72,12 +72,12 @@ void Console::Newline() {
 
     if (window_) {
         Rectangle<int> move_src{
-            {0, KERNEL_GLYPH_HEIGHT},
-            {KERNEL_GLYPH_WIDTH * kColumns, KERNEL_GLYPH_HEIGHT * (kRows - 1)}};
-        window_->Move({0, 0}, move_src);
+            {0, KERNEL_GLYPH_HEIGHT},   // 1st row / 0th col
+            {KERNEL_GLYPH_WIDTH * kColumns, KERNEL_GLYPH_HEIGHT * (kRows - 1)}};    // (kRows - 1) rows / kColumns cols
+        window_->Move({0, 0}, move_src); // 0th row / 0th col
         FillRectangle(*writer_,
-                      {0, KERNEL_GLYPH_HEIGHT * (kRows - 1)},
-                      {KERNEL_GLYPH_WIDTH * kColumns, KERNEL_GLYPH_HEIGHT},
+                      {0, KERNEL_GLYPH_HEIGHT * (kRows - 1)},   // (kRows - 1)th row / 0th col
+                      {KERNEL_GLYPH_WIDTH * kColumns, KERNEL_GLYPH_HEIGHT}, // 1 row / kColumns cols
                       bg_color_);
     } else {
         FillRectangle(*writer_,
@@ -90,16 +90,6 @@ void Console::Newline() {
         }
         memset(buffer_[kRows - 1], 0, kColumns + 1);
     }
-    // for (int y = 0; y < KERNEL_GLYPH_HEIGHT * kRows; ++y) {
-    //     for (int x = 0; x < KERNEL_GLYPH_WIDTH * kColumns; ++x) {
-    //         writer_->Write({x, y}, bg_color_);
-    //     }
-    // }
-    // for (int row = 0; row < kRows - 1; ++row) {
-    //     memcpy(buffer_[row], buffer_[row + 1], kColumns + 1);
-    //     WriteString(*writer_, {0, KERNEL_GLYPH_HEIGHT * row}, buffer_[row], fg_color_);
-    // }
-    // memset(buffer_[kRows - 1], 0, kColumns + 1);
 }
 // #@@range_end(newline)
 

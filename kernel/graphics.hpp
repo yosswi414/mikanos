@@ -30,6 +30,18 @@ auto operator+(const Vector2D<T>& lhs, const Vector2D<U>& rhs)
     return {lhs.x + rhs.x, lhs.y + rhs.y};
 }
 
+template <typename T, typename U>
+auto operator*(const T& lhs, const Vector2D<U>& rhs)
+    -> Vector2D<decltype(lhs * rhs.x)> {
+    return {lhs * rhs.x, lhs * rhs.y};
+}
+
+template <typename T, typename U>
+auto operator*(const Vector2D<T>& lhs, const U& rhs)
+    -> Vector2D<decltype(lhs.x * rhs)> {
+    return {lhs.x * rhs, lhs.y * rhs};
+}
+
 template <typename T>
 Vector2D<T> ElementMax(const Vector2D<T>& lhs, const Vector2D<T>& rhs){
     return {std::max(lhs.x, rhs.x), std::max(lhs.y, rhs.y)};
