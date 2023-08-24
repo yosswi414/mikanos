@@ -9,7 +9,7 @@ OBJS = $(subst .c,.o,$(subst .cpp,.o,$(wildcard *.c *.cpp usb/*.cpp usb/xhci/*.c
 
 DEPENDS = $(join $(dir $(OBJS)),$(addprefix .,$(notdir $(OBJS:.o=.d))))
 
-BASE = /home/yosswi414/mikanOS
+BASE = ../..
 BASEDIR = $(BASE)/osbook/devenv/x86_64-elf
 EDK2DIR = $(BASE)/edk2
 KRNLDIR = $(BASE)/workspace/mikanos/kernel
