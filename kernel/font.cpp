@@ -27,8 +27,8 @@ const uint8_t* GetFont(char c) {
     //     return nullptr;
     // }
     // return font_data_start + index;
-    if (c >= 128) return nullptr;
-    return font_data[c];
+    if (c < 0) return nullptr;
+    return font_data[static_cast<unsigned int>(c)];
 }
 
 void WriteAscii(PixelWriter& writer, Vector2D<int> pos, char c, const PixelColor& color) {

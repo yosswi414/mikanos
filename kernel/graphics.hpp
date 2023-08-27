@@ -1,13 +1,14 @@
 #pragma once
 
 #include <algorithm>
+
 #include "frame_buffer_config.hpp"
 
 struct PixelColor {
     uint8_t r, g, b;
 };
 
-inline bool operator==(const PixelColor& lhs, const PixelColor& rhs){
+inline bool operator==(const PixelColor& lhs, const PixelColor& rhs) {
     return lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b;
 }
 inline bool operator!=(const PixelColor& lhs, const PixelColor& rhs) {
@@ -43,7 +44,7 @@ auto operator*(const Vector2D<T>& lhs, const U& rhs)
 }
 
 template <typename T>
-Vector2D<T> ElementMax(const Vector2D<T>& lhs, const Vector2D<T>& rhs){
+Vector2D<T> ElementMax(const Vector2D<T>& lhs, const Vector2D<T>& rhs) {
     return {std::max(lhs.x, rhs.x), std::max(lhs.y, rhs.y)};
 }
 
@@ -65,16 +66,16 @@ class PixelWriter {
     virtual int Height() const = 0;
 };
 
-class FrameBufferWriter : public PixelWriter{
+class FrameBufferWriter : public PixelWriter {
   public:
-    FrameBufferWriter(const FrameBufferConfig& config): config_{config}{}
+    FrameBufferWriter(const FrameBufferConfig& config) : config_{config} {}
     virtual ~FrameBufferWriter() = default;
     virtual int Width() const override { return config_.horizontal_resolution; }
     virtual int Height() const override { return config_.vertical_resolution; }
 
   protected:
     uint8_t* PixelAt(Vector2D<int> pos) {
-        const int PIXEL_SIZE = 4; // RGBResv 8-bit color -> 32 bits
+        const int PIXEL_SIZE = 4;  // RGBResv 8-bit color -> 32 bits
         return config_.frame_buffer + PIXEL_SIZE * (config_.pixels_per_scan_line * pos.y + pos.x);
     }
 
@@ -96,7 +97,6 @@ class BGRResv8BitPerColorPixelWriter : public FrameBufferWriter {
 };
 // #@@range_end(pixel_writer_def)
 
-
 void FillRectangle(PixelWriter& writer, const Vector2D<int>& pos,
                    const Vector2D<int>& size, const PixelColor& c);
 
@@ -107,4 +107,3 @@ const PixelColor kDesktopBGColor{45, 118, 237};
 const PixelColor kDesktopFGColor{255, 255, 255};
 
 void DrawDesktop(PixelWriter& writer);
-

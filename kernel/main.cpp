@@ -16,24 +16,22 @@
 #include "frame_buffer_config.hpp"
 #include "graphics.hpp"
 #include "interrupt.hpp"
+#include "layer.hpp"
 #include "logger.hpp"
+#include "memory_manager.hpp"
 #include "memory_map.hpp"
 #include "mouse.hpp"
+#include "paging.hpp"
 #include "pci.hpp"
 #include "queue.hpp"
+#include "segment.hpp"
+#include "timer.hpp"
 #include "usb/classdriver/mouse.hpp"
 #include "usb/device.hpp"
 #include "usb/memory.hpp"
 #include "usb/xhci/trb.hpp"
 #include "usb/xhci/xhci.hpp"
-#include "segment.hpp"
-#include "paging.hpp"
-#include "memory_manager.hpp"
-
 #include "window.hpp"
-#include "layer.hpp"
-
-#include "timer.hpp"
 
 // void* operator new(size_t size, void *buf) noexcept {
 //     return buf;
@@ -80,7 +78,6 @@ BitmapMemoryManager *memory_manager;
 // MouseCursor *mouse_cursor;
 unsigned int mouse_layer_id;
 
-
 void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
     // mouse_cursor->MoveRelative({displacement_x, displacement_y});
     layer_manager->MoveRelative(mouse_layer_id, {displacement_x, displacement_y});
@@ -95,12 +92,10 @@ void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
     static int mx = 200, my = 200, cMouse = 0;
     mx += displacement_x;
     my += displacement_y;
-    (++cMouse) %= 5;
-    if(!cMouse) printk("MouseObserver: elapsed = %u\t(%d,%d)\n", elapsed, mx, my);
+    (++cMouse) %= 1;
+    if (!cMouse) printk("MouseObserver: elapsed = %u\t(%d,%d)\n", elapsed, mx, my);
 }
 // #@@range_end(mouse_observer)
-
-
 
 // #@@range_begin(switch_echi2xhci)
 // Intel Panther Point でデフォルトの EHCI 制御から xHCI 制御に切り替える特殊処理
@@ -153,7 +148,7 @@ alignas(16) uint8_t kernel_main_stack[1024 * 1024];
 
 extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_ref,
                                    const MemoryMap &memory_map_ref,
-                                   uint8_t* font_data_ref) {
+                                   uint8_t *font_data_ref) {
     FrameBufferConfig frame_buffer_config{frame_buffer_config_ref};
     MemoryMap memory_map{memory_map_ref};
 
@@ -182,7 +177,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     console = new (console_buf) Console{kDesktopFGColor, kDesktopBGColor};
     console->SetWriter(pixel_writer);
 
-    printk("Welcome to MikanOS! 2023/08/06 rev.001\n");
+    printk("Welcome to MikanOS! 2023/08/26 rev.001\n");
 
     SetLogLevel(kInfo);
 
@@ -215,7 +210,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
          itr < memory_map_base + memory_map.map_size;
          itr += memory_map.descriptor_size) {
         auto desc = reinterpret_cast<const MemoryDescriptor *>(itr);
-        
 
         if (available_end < desc->physical_start) {
             memory_manager->MarkAllocated(
@@ -232,8 +226,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
                 desc->physical_start + desc->number_of_pages * kUEFIPageSize - 1,
                 desc->number_of_pages,
                 desc->attribute);
-        }
-        else{
+        } else {
             memory_manager->MarkAllocated(
                 FrameID{desc->physical_start / kBytesPerFrame},
                 desc->number_of_pages * kUEFIPageSize / kBytesPerFrame);
@@ -241,7 +234,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     }
     memory_manager->SetMemoryRange(FrameID{1}, FrameID{available_end / kBytesPerFrame});
 
-    if(auto err = InitializeHeap(*memory_manager)){
+    if (auto err = InitializeHeap(*memory_manager)) {
         Log(kError, "failed to allocate pages: %s at %s:%d\n", err.Name(), err.File(), err.Line());
         exit(1);
     }
@@ -250,12 +243,11 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     Log(kInfo, "memory capacity: %d MiB\n", available_end / (1_MiB));
     // #@@range_end(mark_allocated)
 
-    const std::array available_memory_types{
-        MemoryType::kEfiBootServicesCode,
-        MemoryType::kEfiBootServicesData,
-        MemoryType::kEfiConventionalMemory,
-    };
-
+    // const std::array available_memory_types{
+    //     MemoryType::kEfiBootServicesCode,
+    //     MemoryType::kEfiBootServicesData,
+    //     MemoryType::kEfiConventionalMemory,
+    // };
 
     // #@@range_begin(new_mouse_cursor)
     // mouse_cursor = new (mouse_cursor_buf) MouseCursor{pixel_writer, kDesktopBGColor, {600, 500}};
@@ -291,7 +283,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
         Log(kInfo, "xHC has been found: %d.%d.%d (vend: %04x)\n", xhc_dev->bus, xhc_dev->device, xhc_dev->function, pci::ReadVendorId(*xhc_dev));
     }
 
-    
     SetIDTEntry(idt[InterruptVector::kXHCI], MakeIDTAttr(DescriptorType::kInterruptGate, 0),
                 reinterpret_cast<uint64_t>(IntHandlerXHCI), kernel_cs);
     LoadIDT(sizeof(idt) - 1, reinterpret_cast<uintptr_t>(&idt[0]));
@@ -325,7 +316,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     xhc.Run();
 
     ::xhc = &xhc;
-    
+
     // [list 6.23, p.155]
     // #@@range_begin(configure_port)
     usb::HIDMouseDriver::default_observer = MouseObserver;
@@ -356,7 +347,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     DrawMouseCursor(mouse_window->Writer(), {0, 0});
 
     FrameBuffer screen;
-    if(auto err = screen.Initialize(frame_buffer_config)){
+    if (auto err = screen.Initialize(frame_buffer_config)) {
         Log(kError, "failed to initialize frame buffer: %s at %s:%d\n",
             err.Name(), err.File(), err.Line());
     }
