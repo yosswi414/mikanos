@@ -48,7 +48,8 @@ class Window : public PixelWriter {
     void SetTransparentColor(std::optional<PixelColor> c);
     /** @brief このインスタンスに紐づいた WindowWriter を取得する */
     // WindowWriter* Writer();
-    FrameBufferWriter* Writer();
+    // FrameBufferWriter* Writer();
+    Window* Writer();
 
     // /** @brief 指定した位置のピクセルを返す */
     // PixelColor& At(int x, int y);
@@ -67,7 +68,7 @@ class Window : public PixelWriter {
 
     /**
      * @brief このウィンドウの平面描画領域内で、矩形領域を移動する
-     * 
+     *
      * @param src.pos   移動元矩形の原点
      * @param src.size  移動元矩形の大きさ
      * @param dst_pos   移動先の原点
