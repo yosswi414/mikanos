@@ -5,27 +5,27 @@ TARGET = kernel.elf
 # 	usb/classdriver/base.o usb/classdriver/hid.o usb/classdriver/keyboard.o \
 # 	usb/classdriver/mouse.o \
 # 	interrupt.o segment.o paging.o memory_manager.o
-OBJS = $(subst .c,.o,$(subst .cpp,.o,$(wildcard *.c *.cpp usb/*.cpp usb/xhci/*.cpp usb/classdriver/*.cpp))) asmfunc.o
+OBJS = $(subst .c,.o,$(shell find . -type f -name "*.c")) $(subst .cpp,.o,$(shell find . -type f -name "*.cpp")) asmfunc.o
 
 DEPENDS = $(join $(dir $(OBJS)),$(addprefix .,$(notdir $(OBJS:.o=.d))))
 
-BASE = ../../..
-BASEDIR = $(BASE)/osbook/devenv/x86_64-elf
-EDK2DIR = $(BASE)/edk2
-KRNLDIR = $(BASE)/workspace/mikanos/kernel
+BASE = $(HOME)/mikanOS
+BASE_DIR = $(BASE)/osbook/devenv/x86_64-elf
+EDK2_DIR = $(BASE)/edk2
+KERNEL_DIR = $(BASE)/workspace/mikanos/kernel
 
-CPPFLAGS += -I. -I$(BASEDIR)/include/c++/v1 -I$(BASEDIR)/include -nostdlibinc -D__ELF__ -D_LDBL_EQ_DBL -D_GNU_SOURCE -D_POSIX_TIMERS \
+CPPFLAGS += -I. -I$(BASE_DIR)/include/c++/v1 -I$(BASE_DIR)/include -nostdlibinc -D__ELF__ -D_LDBL_EQ_DBL -D_GNU_SOURCE -D_POSIX_TIMERS \
      -DEFIAPI='__attribute__((ms_abi))'
 CFLAGS   += -O2 -Wall -g --target=x86_64-elf -ffreestanding -mno-red-zone
 CXXFLAGS += -O2 -Wall -g --target=x86_64-elf -ffreestanding -mno-red-zone \
             -fno-exceptions -fno-rtti -std=c++17
-LDFLAGS  += --entry KernelMain -z norelro --image-base 0x100000 --static -L$(BASEDIR)/lib
+LDFLAGS  += --entry KernelMain -z norelro --image-base 0x100000 --static -L$(BASE_DIR)/lib
 
 
 # CPPFLAGS += -I. \
-    # -I$(BASEDIR)/include/c++/v1 -I$(BASEDIR)/include -I$(BASEDIR)/include/freetype2 \
-    # -I$(EDK2DIR)/MdePkg/Include -I$(EDK2DIR)/MdePkg/Include/X64 \
-	# -I$(KRNLDIR) \
+    # -I$(BASE_DIR)/include/c++/v1 -I$(BASE_DIR)/include -I$(BASE_DIR)/include/freetype2 \
+    # -I$(EDK2_DIR)/MdePkg/Include -I$(EDK2_DIR)/MdePkg/Include/X64 \
+	# -I$(KERNEL_DIR) \
 
 # OLD_SHELL := $(SHELL)
 # SHELL = $(warning [Making: $@]   [Dependencies: $^]   [Changed: $?])$(OLD_SHELL)
@@ -35,9 +35,8 @@ all: $(TARGET)
 
 .PHONY: clean
 clean:
-	rm -f *.o
-	rm -f *.d
-	rm -f kernel.elf kernel.lst
+	find $(KERNEL_DIR) \( -name "*.o" \) -delete
+	rm kernel.elf kernel.lst
 
 kernel.elf: $(OBJS) Makefile
 	ld.lld $(LDFLAGS) -o kernel.elf $(OBJS) -lc -lc++ -lc++abi
