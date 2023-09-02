@@ -92,7 +92,7 @@ void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
     static int mx = 200, my = 200, cMouse = 0;
     mx += displacement_x;
     my += displacement_y;
-    (++cMouse) %= 1;
+    (++cMouse) %= 5;
     if (!cMouse) printk("MouseObserver: elapsed = %u\t(%d,%d)\n", elapsed, mx, my);
 }
 // #@@range_end(mouse_observer)
@@ -177,9 +177,9 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     console = new (console_buf) Console{kDesktopFGColor, kDesktopBGColor};
     console->SetWriter(pixel_writer);
 
-    printk("Welcome to MikanOS! 2023/08/26 rev.001\n");
+    printk("Welcome to MikanOS! " __DATE__ " " __TIME__ " rev.001\n");
 
-    SetLogLevel(kInfo);
+    SetLogLevel(kWarn);
 
     InitializeLAPICTimer();
 
@@ -337,14 +337,16 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     const int kFrameHeight = frame_buffer_config.vertical_resolution;
 
     auto bgwindow = std::make_shared<Window>(kFrameWidth, kFrameHeight, frame_buffer_config.pixel_format);
-    auto bgwriter = bgwindow->Writer();
+    // auto bgwriter = bgwindow->Writer();
 
-    DrawDesktop(*bgwriter);
+    // DrawDesktop(*bgwriter);
+    DrawDesktop(*bgwindow);
     console->SetWindow(bgwindow);
 
     auto mouse_window = std::make_shared<Window>(kMouseCursorWidth, kMouseCursorHeight, frame_buffer_config.pixel_format);
     mouse_window->SetTransparentColor(kMouseTransparentColor);
-    DrawMouseCursor(mouse_window->Writer(), {0, 0});
+    // DrawMouseCursor(mouse_window->Writer(), {0, 0});
+    DrawMouseCursor(mouse_window.get(), {0, 0});
 
     FrameBuffer screen;
     if (auto err = screen.Initialize(frame_buffer_config)) {
