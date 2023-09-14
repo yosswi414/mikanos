@@ -48,7 +48,6 @@ char console_buf[sizeof(Console)];
 Console *console;
 // #@@range_end(console_buf)
 
-// #@@range_begin(printk)
 int printk(const char *format, ...) {
     va_list ap;
     int result;
@@ -67,7 +66,6 @@ int printk(const char *format, ...) {
     console->PutString(s);
     return result;
 }
-// #@@range_end(printk)
 
 char memory_manager_buf[sizeof(BitmapMemoryManager)];
 BitmapMemoryManager *memory_manager;
@@ -78,9 +76,16 @@ BitmapMemoryManager *memory_manager;
 // MouseCursor *mouse_cursor;
 unsigned int mouse_layer_id;
 
+Vector2D<int> screen_size;
+Vector2D<int> mouse_position;
+
 void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
+    auto newpos = mouse_position + Vector2D<int>{displacement_x, displacement_y};
+    newpos = ElementMin(newpos, screen_size + Vector2D<int>{-1, -1});
+    newpos = ElementMax(newpos, {0, 0});
+    mouse_position = newpos;
     // mouse_cursor->MoveRelative({displacement_x, displacement_y});
-    layer_manager->MoveRelative(mouse_layer_id, {displacement_x, displacement_y});
+    layer_manager->Move(mouse_layer_id, mouse_position);
 
     // measures time to draw mouse icon layer
     StartLAPICTimer();
@@ -89,11 +94,11 @@ void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
 
     auto elapsed = LAPICTimerElapsed();
     StopLAPICTimer();
-    static int mx = 200, my = 200, cMouse = 0;
-    mx += displacement_x;
-    my += displacement_y;
+    static int cMouse = 0;
     (++cMouse) %= 5;
-    if (!cMouse) printk("MouseObserver: elapsed = %u\t(%d,%d)\n", elapsed, mx, my);
+    if (!cMouse) {
+        printk("MouseObserver: elapsed = %u\t(%d,%d) +(%d,%d)\n", elapsed, mouse_position.x, mouse_position.y, displacement_x, displacement_y);
+    }
 }
 // #@@range_end(mouse_observer)
 
@@ -348,6 +353,11 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     // DrawMouseCursor(mouse_window->Writer(), {0, 0});
     DrawMouseCursor(mouse_window.get(), {0, 0});
 
+    screen_size = {
+        static_cast<int>(frame_buffer_config.horizontal_resolution),
+        static_cast<int>(frame_buffer_config.vertical_resolution)
+    };
+
     FrameBuffer screen;
     if (auto err = screen.Initialize(frame_buffer_config)) {
         Log(kError, "failed to initialize frame buffer: %s at %s:%d\n",
@@ -368,11 +378,21 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
                          .Move({200, 200})
                          .ID();
 
+    // list 10.4, p.249
+    auto main_window = std::make_shared<Window>(160, 68, frame_buffer_config.pixel_format);
+    DrawWindow(*main_window, "Hello World");
+    WriteString(*main_window, {24, 28}, "Welcome to", {0, 0, 0});
+    WriteString(*main_window, {24, 44}, " MikanOS world!", {0, 0, 0});
+
+    auto main_window_layer_id = layer_manager->NewLayer()
+                                    .SetWindow(main_window)
+                                    .Move({300, 100})
+                                    .ID();
+
     layer_manager->UpDown(bglayer_id, 0);
     layer_manager->UpDown(mouse_layer_id, 1);
+    layer_manager->UpDown(main_window_layer_id, 1);
     layer_manager->Draw();
-
-    // __asm__("sti");  // Set Interrupt Flag
 
     // event loop
     while (true) {
