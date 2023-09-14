@@ -389,19 +389,38 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
                                     .Move({300, 100})
                                     .ID();
 
+    // list 10.8, p.252
+    auto counter_window = std::make_shared<Window>(160, 52, frame_buffer_config.pixel_format);
+    DrawWindow(*counter_window, "Count, Count");
+
+    char str[128];
+    unsigned int count = 0;
+
+    auto counter_window_layer_id = layer_manager->NewLayer()
+                                    .SetWindow(counter_window)
+                                    .Move({400, 200})
+                                    .ID();
+
     layer_manager->UpDown(bglayer_id, 0);
     layer_manager->UpDown(mouse_layer_id, 1);
     layer_manager->UpDown(main_window_layer_id, 1);
+    layer_manager->UpDown(counter_window_layer_id, 1);
     layer_manager->Draw();
 
     // event loop
     while (true) {
+        sprintf(str, "%010u", ++count);
+        FillRectangle(*counter_window, {24, 28}, {KERNEL_GLYPH_WIDTH * 10, KERNEL_GLYPH_HEIGHT}, {0xc6, 0xc6, 0xc6});
+        WriteString(*counter_window, {24, 28}, str, {0, 0, 0});
+        layer_manager->Draw();
+        
         __asm__("cli");  // Clear Interrupt Flag
         if (main_queue.Count() == 0) {
             /* sti 命令と直後の 1 命令の間では割り込みが起きないという仕様を活用するため
              * sti と hlt を並べることが肝要
              */
-            __asm__("sti\n\thlt");
+            // __asm__("sti\n\thlt");
+            __asm__("sti");
             continue;
         }
 
