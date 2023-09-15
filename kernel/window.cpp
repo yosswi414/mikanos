@@ -45,41 +45,21 @@ Window::Window(int width, int height, PixelFormat shadow_format) : width_{width}
     }
 }
 
-// void Window::DrawTo(PixelWriter& writer, Vector2D<int> position) {
-//     if (!transparent_color_) {
-//         for (int y = 0; y < Height(); ++y) {
-//             for (int x = 0; x < Width(); ++x) {
-//                 writer.Write(position.x + x, position.y + y, At(x, y));
-//             }
-//         }
-//         return;
-//     }
-//
-//     const auto tc = transparent_color_.value();
-//     for (int y = 0; y < Height(); ++y) {
-//         for (int x = 0; x < Width(); ++x) {
-//             const auto c = At(x, y);
-//             if (c != tc) writer.Write(position.x + x, position.y + y, c);
-//         }
-//     }
-// }
-
-void Window::DrawTo(FrameBuffer& dst, Vector2D<int> position) {
+void Window::DrawTo(FrameBuffer& dst, Vector2D<int> pos, const Rectangle<int>& area) {
     if (!transparent_color_) {
-        dst.Copy(position, shadow_buffer_);
+        Rectangle<int> window_area{pos, Size()};
+        Rectangle<int> intersection = area & window_area;
+        dst.Copy(intersection.pos, shadow_buffer_, {intersection.pos - pos, intersection.size});
         return;
     }
 
     const auto tc = transparent_color_.value();
     auto& writer = dst.Writer();
-    /*
-     * x pos
-     * 
-     */
-    for (int y = std::max(0, 0 - position.y); y < std::min(Height(), writer.Height() - position.y); ++y) {
-        for (int x = std::max(0, 0 - position.x); x < std::min(Width(), writer.Width() - position.x); ++x) {
+
+    for (int y = std::max(0, 0 - pos.y); y < std::min(Height(), writer.Height() - pos.y); ++y) {
+        for (int x = std::max(0, 0 - pos.x); x < std::min(Width(), writer.Width() - pos.x); ++x) {
             const auto c = At({x, y});
-            if (c != tc) writer.Write(position + Vector2D<int>{x, y}, c);
+            if (c != tc) writer.Write(pos + Vector2D<int>{x, y}, c);
         }
     }
 }
@@ -88,12 +68,12 @@ void Window::SetTransparentColor(std::optional<PixelColor> c) {
     transparent_color_ = c;
 }
 
-// Window::WindowWriter* Window::Writer() { return &writer_; }
-// FrameBufferWriter* Window::Writer() { return &shadow_buffer_.Writer(); }
 Window* Window::Writer() { return this; }
 
 int Window::Width() const { return width_; }
 int Window::Height() const { return height_; }
+
+Vector2D<int> Window::Size() const { return {Width(), Height()}; }
 
 const PixelColor& Window::At(Vector2D<int> pos) const {
     return data_[pos.y][pos.x];

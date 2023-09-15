@@ -20,27 +20,44 @@ struct Vector2D {
     T x, y;
     template <typename U>
     Vector2D<T>& operator+=(const Vector2D<U>& rhs) {
-        x += rhs.x, y += rhs.y;
+        x += rhs.x;
+        y += rhs.y;
         return *this;
+    }
+
+    template <typename U>
+    Vector2D<T> operator+(const Vector2D<U>& rhs) const {
+        return Vector2D<T>(*this) += rhs;
+    }
+
+    template <typename U>
+    Vector2D<T>& operator-=(const Vector2D<U>& rhs) {
+        x -= rhs.x;
+        y -= rhs.y;
+        return *this;
+    }
+
+    template <typename U>
+    Vector2D<T> operator-(const Vector2D<U>& rhs) const {
+        return Vector2D<T>(*this) -= rhs;
+    }
+
+    template <typename U>
+    Vector2D<T>& operator*=(const U& r) {
+        x *= r;
+        y *= r;
+        return *this;
+    }
+
+    template <typename U>
+    Vector2D<T> operator*(const U& r) {
+        return Vector2D<T>(*this) *= r;
     }
 };
 
 template <typename T, typename U>
-auto operator+(const Vector2D<T>& lhs, const Vector2D<U>& rhs)
-    -> Vector2D<decltype(lhs.x + rhs.x)> {
-    return {lhs.x + rhs.x, lhs.y + rhs.y};
-}
-
-template <typename T, typename U>
-auto operator*(const T& lhs, const Vector2D<U>& rhs)
-    -> Vector2D<decltype(lhs * rhs.x)> {
-    return {lhs * rhs.x, lhs * rhs.y};
-}
-
-template <typename T, typename U>
-auto operator*(const Vector2D<T>& lhs, const U& rhs)
-    -> Vector2D<decltype(lhs.x * rhs)> {
-    return {lhs.x * rhs, lhs.y * rhs};
+Vector2D<U> operator*(const T& l, const Vector2D<U>& rhs) {
+    return rhs * l;
 }
 
 template <typename T>
@@ -57,6 +74,19 @@ template <typename T>
 struct Rectangle {
     Vector2D<T> pos, size;
 };
+
+template <typename T, typename U>
+Rectangle<T> operator&(const Rectangle<T>& lhs, const Rectangle<U>& rhs) {
+    const auto lpos_d = lhs.pos + lhs.size;
+    const auto rpos_d = rhs.pos + rhs.size;
+    if (lpos_d.x < rhs.pos.x || rpos_d.x < lhs.pos.x ||
+        lpos_d.y < rhs.pos.y || rpos_d.y < lhs.pos.y) {
+        return {{0, 0}, {0, 0}};
+    }
+    auto pos = ElementMax(lhs.pos, rhs.pos);
+    auto size = ElementMin(lpos_d, rpos_d) - pos;
+    return {pos, size};
+}
 
 class PixelWriter {
   public:

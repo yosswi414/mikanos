@@ -85,12 +85,13 @@ void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
     newpos = ElementMax(newpos, {0, 0});
     mouse_position = newpos;
     // mouse_cursor->MoveRelative({displacement_x, displacement_y});
-    layer_manager->Move(mouse_layer_id, mouse_position);
+    
 
     // measures time to draw mouse icon layer
     StartLAPICTimer();
 
-    layer_manager->Draw();
+    // layer_manager->Draw();
+    layer_manager->Move(mouse_layer_id, mouse_position);
 
     auto elapsed = LAPICTimerElapsed();
     StopLAPICTimer();
@@ -375,7 +376,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
                           .ID();
     mouse_layer_id = layer_manager->NewLayer()
                          .SetWindow(mouse_window)
-                         .Move({200, 200})
+                         .Move({0, 0})
                          .ID();
 
     // list 10.4, p.249
@@ -401,19 +402,33 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
                                     .Move({400, 200})
                                     .ID();
 
+    // list 10.20, p.258
+    auto console_window = std::make_shared<Window>(
+        Console::kColumns * KERNEL_GLYPH_WIDTH,
+        Console::kRows * KERNEL_GLYPH_HEIGHT,
+        frame_buffer_config.pixel_format);
+    console->SetWindow(console_window);
+
+    // list 10.21, p.258
+    console->SetLayerID(layer_manager->NewLayer()
+                            .SetWindow(console_window)
+                            .Move({0, 0})
+                            .ID());
+
     layer_manager->UpDown(bglayer_id, 0);
-    layer_manager->UpDown(mouse_layer_id, 1);
-    layer_manager->UpDown(main_window_layer_id, 1);
-    layer_manager->UpDown(counter_window_layer_id, 1);
-    layer_manager->Draw();
+    layer_manager->UpDown(console->LayerID(), 1);
+    layer_manager->UpDown(main_window_layer_id, 2);
+    layer_manager->UpDown(counter_window_layer_id, 2);
+    layer_manager->UpDown(mouse_layer_id, 3);
+    layer_manager->Draw({{0, 0}, screen_size});
 
     // event loop
     while (true) {
         sprintf(str, "%010u", ++count);
         FillRectangle(*counter_window, {24, 28}, {KERNEL_GLYPH_WIDTH * 10, KERNEL_GLYPH_HEIGHT}, {0xc6, 0xc6, 0xc6});
         WriteString(*counter_window, {24, 28}, str, {0, 0, 0});
-        layer_manager->Draw();
-        
+        layer_manager->Draw(counter_window_layer_id);
+
         __asm__("cli");  // Clear Interrupt Flag
         if (main_queue.Count() == 0) {
             /* sti 命令と直後の 1 命令の間では割り込みが起きないという仕様を活用するため

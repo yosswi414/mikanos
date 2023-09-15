@@ -20,7 +20,8 @@ Console::Console(  // PixelWriter& writer,
       bg_color_{bg_color},
       buffer_{},
       cursor_row_{0},
-      cursor_column_{0} {
+      cursor_column_{0},
+      layer_id_{0} {
 }
 // #@@range_end(constructor)
 
@@ -44,7 +45,7 @@ void Console::PutString(const char* s) {
         }
         ++s;
     }
-    if (layer_manager) layer_manager->Draw();
+    if (layer_manager) layer_manager->Draw(layer_id_);
 }
 // #@@range_end(put_string)
 
@@ -60,6 +61,14 @@ void Console::SetWindow(const std::shared_ptr<Window>& window){
     window_ = window;
     writer_ = window->Writer();
     Refresh();
+}
+
+void Console::SetLayerID(unsigned int id){
+    layer_id_ = id;
+}
+
+unsigned int Console::LayerID() const {
+    return layer_id_;
 }
 
 // #@@range_begin(newline)
@@ -94,6 +103,7 @@ void Console::Newline() {
 // #@@range_end(newline)
 
 void Console::Refresh() {
+    FillRectangle(*writer_, {0, 0}, {KERNEL_GLYPH_WIDTH * kColumns, KERNEL_GLYPH_HEIGHT * kRows}, bg_color_);
     for (int row = 0; row < kRows; ++row) {
         WriteString(*writer_, {0, KERNEL_GLYPH_HEIGHT * row}, buffer_[row], fg_color_);
     }

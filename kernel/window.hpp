@@ -9,27 +9,6 @@
 
 class Window : public PixelWriter {
   public:
-    /** @brief WindowWriter は Window と関連付けられた PixelWriter を提供する
-     */
-    // class WindowWriter : public PixelWriter {
-    //   public:
-    //     WindowWriter(Window& window) : window_{window} {}
-    //     /** @brief 指定された位置に指定された色を描画する */
-    //     // virtual void Write(int x, int y, const PixelColor& c) override {
-    //     //     window_.At(x, y) = c;
-    //     // }
-    //     virtual void Write(Vector2D<int> pos, const PixelColor& c) override {
-    //         window_.Write(pos, c);
-    //     }
-    //     /** @brief Width は関連付けられた Window の横幅をピクセル単位で返す */
-    //     virtual int Width() const override { return window_.Width(); }
-    //     /** @brief Height は関連付けられた Window の縦幅をピクセル単位で返す */
-    //     virtual int Height() const override { return window_.Height(); }
-
-    //   private:
-    //     Window& window_;
-    // };
-
     /** @brief 指定されたピクセル数の平面描画領域を作成する */
     Window(int width, int height, PixelFormat shadow_format);
     ~Window() = default;
@@ -42,19 +21,12 @@ class Window : public PixelWriter {
      * @param dst       描画先
      * @param position  writer の左上を基準とした描画位置
      */
-    void DrawTo(FrameBuffer& dst, Vector2D<int> position);
-    // void DrawTo(PixelWriter& writer, Vector2D<int> position);
+    void DrawTo(FrameBuffer& dst, Vector2D<int> pos, const Rectangle<int>& area);
     /** @brief 透過色を設定する */
     void SetTransparentColor(std::optional<PixelColor> c);
-    /** @brief このインスタンスに紐づいた WindowWriter を取得する */
-    // WindowWriter* Writer();
-    // FrameBufferWriter* Writer();
+    /** @brief PixelWriter のインタフェースである Writer() を提供 *this を返す */
     Window* Writer();
 
-    // /** @brief 指定した位置のピクセルを返す */
-    // PixelColor& At(int x, int y);
-    // /** @brief 指定した位置のピクセルを返す */
-    // const PixelColor& At(int x, int y) const;
     /** @brief 指定した位置のピクセルを返す */
     const PixelColor& At(Vector2D<int> pos) const;
 
@@ -62,6 +34,8 @@ class Window : public PixelWriter {
     int Width() const override;
     /** @brief 平面描画領域の縦幅をピクセル単位で返す */
     int Height() const override;
+    /** @brief 平面描画領域のサイズを返す */
+    Vector2D<int> Size() const;
 
     /** @brief シャドウバッファに転送しながら描画する */
     void Write(Vector2D<int> pos, const PixelColor& c) override;
@@ -78,7 +52,6 @@ class Window : public PixelWriter {
   private:
     int width_, height_;
     std::vector<std::vector<PixelColor>> data_{};
-    // WindowWriter writer_{*this};
     std::optional<PixelColor> transparent_color_{std::nullopt};
 
     FrameBuffer shadow_buffer_{};
