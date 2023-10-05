@@ -104,3 +104,5 @@ void FrameBuffer::Move(Vector2D<int> dst_pos, const Rectangle<int>& src) {
         }
     }
 }
+
+const FrameBufferConfig& FrameBuffer::Config() const { return config_; }
