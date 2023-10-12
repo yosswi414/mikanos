@@ -79,13 +79,22 @@ unsigned int mouse_layer_id;
 Vector2D<int> screen_size;
 Vector2D<int> mouse_position;
 
-void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
+const uint8_t MOUSE_LEFT = 0x01;
+const uint8_t MOUSE_RIGHT = 0x02;
+const uint8_t MOUSE_MIDDLE = 0x04;
+
+void MouseObserver(uint8_t buttons, int8_t displacement_x, int8_t displacement_y) {
+    static unsigned int mouse_drag_layer_id = 0;    // 0: unused id
+    static uint8_t previous_buttons = 0;
+
+    const auto oldpos = mouse_position;
     auto newpos = mouse_position + Vector2D<int>{displacement_x, displacement_y};
     newpos = ElementMin(newpos, screen_size + Vector2D<int>{-1, -1});
     newpos = ElementMax(newpos, {0, 0});
     mouse_position = newpos;
     // mouse_cursor->MoveRelative({displacement_x, displacement_y});
-    
+
+    const auto posdiff = mouse_position - oldpos;
 
     // measures time to draw mouse icon layer
     StartLAPICTimer();
@@ -100,6 +109,21 @@ void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
     if (!cMouse) {
         printk("MouseObserver: elapsed = %u\t(%d,%d) +(%d,%d)\n", elapsed, mouse_position.x, mouse_position.y, displacement_x, displacement_y);
     }
+
+    const bool previous_left_pressed = previous_buttons & MOUSE_LEFT;
+    const bool left_pressed = buttons & MOUSE_LEFT;
+    if(!previous_left_pressed && left_pressed) {
+        auto layer = layer_manager->FindLayerByPosition(mouse_position, mouse_layer_id);
+        if (layer && layer->IsDraggable()) {
+            mouse_drag_layer_id = layer->ID();
+        }
+    } else if (previous_left_pressed && left_pressed) {
+        if (mouse_drag_layer_id > 0) layer_manager->MoveRelative(mouse_drag_layer_id, posdiff);
+    } else if (previous_left_pressed && !left_pressed) {
+        mouse_drag_layer_id = 0;
+    }
+
+    previous_buttons = buttons;
 }
 // #@@range_end(mouse_observer)
 
@@ -387,6 +411,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
 
     auto main_window_layer_id = layer_manager->NewLayer()
                                     .SetWindow(main_window)
+                                    .SetDraggable(true)
                                     .Move({300, 100})
                                     .ID();
 
@@ -399,6 +424,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
 
     auto counter_window_layer_id = layer_manager->NewLayer()
                                     .SetWindow(counter_window)
+                                    .SetDraggable(true)
                                     .Move({400, 200})
                                     .ID();
 
@@ -418,8 +444,8 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     layer_manager->UpDown(bglayer_id, 0);
     layer_manager->UpDown(console->LayerID(), 1);
     layer_manager->UpDown(main_window_layer_id, 2);
-    layer_manager->UpDown(counter_window_layer_id, 2);
-    layer_manager->UpDown(mouse_layer_id, 3);
+    layer_manager->UpDown(counter_window_layer_id, 3);
+    layer_manager->UpDown(mouse_layer_id, 4);
     layer_manager->Draw({{0, 0}, screen_size});
 
     // event loop
