@@ -128,11 +128,11 @@ Layer* LayerManager::FindLayer(unsigned int id) {
     return it->get();
 }
 
-Layer* LayerManager::FindLayerByPosition(Vector2D<int> pos, unsigned  int exclude_id) const {
+Layer* LayerManager::FindLayerByPosition(Vector2D<int> pos, unsigned int exclude_id) const {
     auto pred = [pos, exclude_id](Layer* layer) {
         if (layer->ID() == exclude_id) return false;
         const auto& win = layer->GetWindow();
-        if (!win) return false; // skip layer without window
+        if (!win) return false;  // skip layer without window
         const auto win_pos = layer->GetPosition();
         const auto win_end_pos = win_pos + win->Size();
         return win_pos.x <= pos.x && pos.x < win_end_pos.x &&
@@ -141,6 +141,41 @@ Layer* LayerManager::FindLayerByPosition(Vector2D<int> pos, unsigned  int exclud
     auto itr = std::find_if(layer_stack_.rbegin(), layer_stack_.rend(), pred);
     if (itr == layer_stack_.rend()) return nullptr;
     return *itr;
+}
+
+void LayerManager::SetToFront(unsigned int id) {
+    if (id < 0) return;
+
+    Layer* layer_itr = nullptr;
+    for (auto itr : layer_stack_) {
+        if (itr->ID() == id)
+            layer_itr = itr;
+        else if (itr->IsDraggable() && layer_itr) {
+            std::iter_swap(layer_itr, itr);
+            layer_itr = itr;
+        }
+    }
+
+    // debug console output
+    const bool debug = true;
+    if (!debug) return;
+    const int len = 128;
+    char buf[len];
+    int pos = 0;
+    pos += snprintf(buf + pos, len - pos, "[");
+    std::vector<int> draggables{};
+    for (auto itr : layer_stack_) {
+        if (itr->IsDraggable()) {
+            draggables.push_back(itr->ID());
+            pos += snprintf(buf + pos, len - pos, "d");
+        }
+        if (itr->ID() == id) {
+            pos += snprintf(buf + pos, len - pos, "!");
+        }
+        pos += snprintf(buf + pos, len - pos, "%d, ", itr->ID());
+    }
+    pos += snprintf(buf + pos, len - pos, "]");
+    Log(LogLevel::kWarn, "%s\n", buf);
 }
 
 LayerManager* layer_manager;

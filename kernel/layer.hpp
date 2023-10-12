@@ -73,6 +73,9 @@ class LayerManager {
 
     Layer* FindLayerByPosition(Vector2D<int> pos, unsigned int exclude_id) const;
 
+    // draggable なレイヤの中で最前面に配置する
+    void SetToFront(unsigned int id);
+
   private:
     FrameBuffer* screen_{nullptr};
     mutable FrameBuffer back_buffer_{};

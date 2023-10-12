@@ -57,13 +57,13 @@ int printk(const char *format, ...) {
     result = vsprintf(s, format, ap);
     va_end(ap);
 
-    StartLAPICTimer();
+    // StartLAPICTimer();
     console->PutString(s);
-    auto elapsed = LAPICTimerElapsed();
-    StopLAPICTimer();
+    // auto elapsed = LAPICTimerElapsed();
+    // StopLAPICTimer();
 
-    sprintf(s, "[%9d] ", elapsed);
-    console->PutString(s);
+    // sprintf(s, "[%9d] ", elapsed);
+    // console->PutString(s);
     return result;
 }
 
@@ -92,23 +92,10 @@ void MouseObserver(uint8_t buttons, int8_t displacement_x, int8_t displacement_y
     newpos = ElementMin(newpos, screen_size + Vector2D<int>{-1, -1});
     newpos = ElementMax(newpos, {0, 0});
     mouse_position = newpos;
-    // mouse_cursor->MoveRelative({displacement_x, displacement_y});
 
     const auto posdiff = mouse_position - oldpos;
 
-    // measures time to draw mouse icon layer
-    StartLAPICTimer();
-
-    // layer_manager->Draw();
     layer_manager->Move(mouse_layer_id, mouse_position);
-
-    auto elapsed = LAPICTimerElapsed();
-    StopLAPICTimer();
-    static int cMouse = 0;
-    (++cMouse) %= 5;
-    if (!cMouse) {
-        printk("MouseObserver: elapsed = %u\t(%d,%d) +(%d,%d)\n", elapsed, mouse_position.x, mouse_position.y, displacement_x, displacement_y);
-    }
 
     const bool previous_left_pressed = previous_buttons & MOUSE_LEFT;
     const bool left_pressed = buttons & MOUSE_LEFT;
@@ -116,6 +103,8 @@ void MouseObserver(uint8_t buttons, int8_t displacement_x, int8_t displacement_y
         auto layer = layer_manager->FindLayerByPosition(mouse_position, mouse_layer_id);
         if (layer && layer->IsDraggable()) {
             mouse_drag_layer_id = layer->ID();
+            // クリックしたレイヤを最前面にしたい
+            layer_manager->SetToFront(mouse_drag_layer_id);
         }
     } else if (previous_left_pressed && left_pressed) {
         if (mouse_drag_layer_id > 0) layer_manager->MoveRelative(mouse_drag_layer_id, posdiff);
@@ -405,7 +394,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
 
     // list 10.4, p.249
     auto main_window = std::make_shared<Window>(160, 68, frame_buffer_config.pixel_format);
-    DrawWindow(*main_window, "Hello World");
+    DrawWindow(*main_window, "Hello World 1");
     WriteString(*main_window, {24, 28}, "Welcome to", {0, 0, 0});
     WriteString(*main_window, {24, 44}, " MikanOS world!", {0, 0, 0});
 
@@ -414,6 +403,27 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
                                     .SetDraggable(true)
                                     .Move({300, 100})
                                     .ID();
+
+    auto main_window2 = std::make_shared<Window>(160, 68, frame_buffer_config.pixel_format);
+    DrawWindow(*main_window2, "Hello World 2");
+    WriteString(*main_window2, {24, 28}, "This is", {0, 0, 0});
+    WriteString(*main_window2, {24, 44}, " the second", {0, 0, 0});
+
+    auto main_window2_layer_id = layer_manager->NewLayer()
+                                    .SetWindow(main_window2)
+                                    .SetDraggable(true)
+                                    .Move({300, 200})
+                                    .ID();
+    auto main_window3 = std::make_shared<Window>(160, 68, frame_buffer_config.pixel_format);
+    DrawWindow(*main_window3, "Hello World 3");
+    WriteString(*main_window3, {24, 28}, "I am", {0, 0, 0});
+    WriteString(*main_window3, {24, 44}, " the third win", {0, 0, 0});
+
+    auto main_window3_layer_id = layer_manager->NewLayer()
+                                     .SetWindow(main_window3)
+                                     .SetDraggable(true)
+                                     .Move({300, 300})
+                                     .ID();
 
     // list 10.8, p.252
     auto counter_window = std::make_shared<Window>(160, 52, frame_buffer_config.pixel_format);
@@ -444,8 +454,10 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig &frame_buffer_config_
     layer_manager->UpDown(bglayer_id, 0);
     layer_manager->UpDown(console->LayerID(), 1);
     layer_manager->UpDown(main_window_layer_id, 2);
-    layer_manager->UpDown(counter_window_layer_id, 3);
-    layer_manager->UpDown(mouse_layer_id, 4);
+    layer_manager->UpDown(main_window2_layer_id, 2);
+    layer_manager->UpDown(main_window3_layer_id, 2);
+    layer_manager->UpDown(counter_window_layer_id, 2);
+    layer_manager->UpDown(mouse_layer_id, 100);
     layer_manager->Draw({{0, 0}, screen_size});
 
     // event loop
