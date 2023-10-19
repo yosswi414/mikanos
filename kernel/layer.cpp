@@ -1,6 +1,9 @@
 #include "layer.hpp"
 
 #include <algorithm>
+#include "console.hpp"
+#include "logger.hpp"
+#include "font.hpp"
 
 Layer::Layer(unsigned int id) : id_{id} {}
 
@@ -14,6 +17,13 @@ Layer& Layer::SetWindow(const std::shared_ptr<Window>& window) {
 std::shared_ptr<Window> Layer::GetWindow() const { return window_; }
 
 Vector2D<int> Layer::GetPosition() const { return pos_; }
+
+Layer& Layer::SetDraggable(bool draggable) {
+    draggable_ = draggable;
+    return *this;
+}
+
+bool Layer::IsDraggable() const { return draggable_; }
 
 Layer& Layer::Move(Vector2D<int> pos) {
     pos_ = pos;
@@ -29,12 +39,6 @@ void Layer::DrawTo(FrameBuffer& screen, const Rectangle<int>& area) const {
     if (window_) window_->DrawTo(screen, pos_, area);
 }
 
-Layer& Layer::SetDraggable(bool draggable) {
-    draggable_ = draggable;
-    return *this;
-}
-
-bool Layer::IsDraggable() const { return draggable_; }
 
 void LayerManager::SetWriter(FrameBuffer* screen) {
     screen_ = screen;
@@ -178,4 +182,46 @@ void LayerManager::SetToFront(unsigned int id) {
     Log(LogLevel::kWarn, "%s\n", buf);
 }
 
+namespace {
+    FrameBuffer* screen;
+}
+
 LayerManager* layer_manager;
+
+void InitializeLayer() {
+    const auto screen_size = ScreenSize();
+
+    auto bgwindow = std::make_shared<Window>(screen_size.x, screen_size.y, screen_config.pixel_format);
+    DrawDesktop(*bgwindow);
+
+    // list 10.20, p.258
+    auto console_window = std::make_shared<Window>(
+        Console::kColumns * KERNEL_GLYPH_WIDTH,
+        Console::kRows * KERNEL_GLYPH_HEIGHT,
+        screen_config.pixel_format);
+    console->SetWindow(console_window);
+
+    screen = new FrameBuffer;
+    if (auto err = screen->Initialize(screen_config)) {
+        Log(kError, "failed to initialize frame buffer: %s at %s:%d\n",
+            err.Name(), err.File(), err.Line());
+        exit(1);
+    }
+
+    layer_manager = new LayerManager;
+    layer_manager->SetWriter(screen);
+
+    auto bglayer_id = layer_manager->NewLayer()
+                          .SetWindow(bgwindow)
+                          .Move({0, 0})
+                          .ID();
+
+    // list 10.21, p.258
+    console->SetLayerID(layer_manager->NewLayer()
+                            .SetWindow(console_window)
+                            .Move({0, 0})
+                            .ID());
+
+    layer_manager->UpDown(bglayer_id, 0);
+    layer_manager->UpDown(console->LayerID(), 1);
+}

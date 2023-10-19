@@ -2,8 +2,6 @@
 
 #include "segment.hpp"
 
-#include <array>
-
 #include "asmfunc.h"
 
 namespace {
@@ -49,4 +47,11 @@ void SetupSegments(){
     SetCodeSegment(gdt[1], DescriptorType::kExecuteRead, 0, 0, 0xfffff);    // code segment descriptor
     SetCodeSegment(gdt[2], DescriptorType::kReadWrite, 0, 0, 0xfffff);      // data segment descriptor
     LoadGDT(sizeof(gdt) - 1, reinterpret_cast<uintptr_t>(&gdt[0]));
+}
+
+void InitializeSegmentation() {
+    SetupSegments();
+
+    SetDSAll(kKernelDS);
+    SetCSSS(kKernelCS, kKernelSS);
 }

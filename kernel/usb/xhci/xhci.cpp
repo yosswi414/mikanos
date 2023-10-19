@@ -2,6 +2,8 @@
 
 #include <cstring>
 #include "logger.hpp"
+#include "pci.hpp"
+#include "interrupt.hpp"
 #include "usb/setupdata.hpp"
 #include "usb/device.hpp"
 #include "usb/descriptor.hpp"
@@ -309,6 +311,26 @@ namespace {
              !r.bits.hc_os_owned_semaphore);
     Log(kDebug, "OS has owned xHC\n");
   }
+
+  // Intel Panther Point でデフォルトの EHCI 制御から xHCI 制御に切り替える特殊処理
+  void SwitchEhci2Xhci(const pci::Device& xhc_dev) {
+    bool intel_ehc_exist = false;
+    for (int i = 0; i < pci::num_device; ++i) {
+      if (pci::devices[i].class_code.Match(0x0cu, 0x03u, 0x20u) /* EHCI */ &&
+          0x8086 == pci::ReadVendorId(pci::devices[i])) {
+        intel_ehc_exist = true;
+        break;
+      }
+    }
+    if (!intel_ehc_exist) return;
+    // レジスタ (参考文献[9] 17.1.33 - 17.1.36) (p.154)
+    uint32_t superspeed_ports = pci::ReadConfReg(xhc_dev, 0xdc);  // USB3PRM (SuperSpeed が有効なポートが set されている)
+    pci::WriteConfReg(xhc_dev, 0xd8, superspeed_ports);           // USB3_PSSEN (USB 3.0 Port SuperSpeed Enable: set したポートに対し SuperSpeed が有効になる)
+    uint32_t ehci2xhci_ports = pci::ReadConfReg(xhc_dev, 0xd4);   // XUSB2PRM (xHCI モードが有効なポートが set されている)
+    pci::WriteConfReg(xhc_dev, 0xd0, ehci2xhci_ports);            // XUSB2PR (xHC USB 2.0 Port Routing: 各ビットが USB ポート一つに対応し、set したポートは xHCI モードになる)
+    Log(kDebug, "SwitchEhci2Xhci: SS = %02, xHCI = %02x\n",
+      superspeed_ports, ehci2xhci_ports);
+  }
 }
 
 namespace usb::xhci {
@@ -504,4 +526,78 @@ namespace usb::xhci {
 
     return err;
   }
-}
+
+  Controller* controller;
+
+  void Initialize() {
+    // Intel 製を優先して xHC を探す
+    pci::Device *xhc_dev = nullptr;
+    for (int i = 0; i < pci::num_device; ++i) {
+      // all xHCI controllers will have 0x0c, 0x03, 0x30
+      if (pci::devices[i].class_code.Match(0x0cu, 0x03u, 0x30u)) {
+        xhc_dev = &pci::devices[i];
+        if (0x8086 == pci::ReadVendorId(*xhc_dev)) break;
+      }
+    }
+    if (xhc_dev) {
+      Log(kInfo, "xHC has been found: %d.%d.%d (vend: %04x)\n", xhc_dev->bus, xhc_dev->device, xhc_dev->function, pci::ReadVendorId(*xhc_dev));
+    } else {
+      Log(kError, "xHC has not been found\n");
+      exit(1);
+    }
+
+    // [list 7.8, p.170]
+    // bsp: BootStrap Processor
+    const uint8_t bsp_local_apic_id = interrupt::Controller().GetLAPICID();
+    pci::ConfigureMSIFixedDestination(
+      *xhc_dev, bsp_local_apic_id,
+      pci::MSITriggerMode::kLevel,
+      pci::MSIDeliveryMode::kFixed,
+      InterruptVector::kXHCI, 0);
+
+    // PCI デバイス (*xhc_dev) の BAR0 レジスタを読み取る
+    const WithError<uint64_t> xhc_bar = pci::ReadBar(*xhc_dev, 0);
+    Log(kDebug, "ReadBar: %s\n", xhc_bar.error.Name());
+    // 下位 4 ビットに BAR のフラグがあるので ~0xf でマスクして除去
+    const uint64_t xhc_mmio_base = xhc_bar.value & ~static_cast<uint64_t>(0xf);
+    Log(kDebug, "xhc_bar = 0x%016lx\n", xhc_bar.value);
+    Log(kDebug, "xHC mmio_base = 0x%08lx\n", xhc_mmio_base);
+
+    // xHCI 規格にしたがったホストコントローラを制御するためのクラス (p.153)
+    usb::xhci::controller = new Controller{xhc_mmio_base};
+    Controller& xhc = *usb::xhci::controller;
+
+    if (0x8086 == pci::ReadVendorId(*xhc_dev)) SwitchEhci2Xhci(*xhc_dev);
+    // xHC がリセットされた後、動作に必要な設定が行われる (p.153)
+    if (auto err = xhc.Initialize()) {
+      Log(kError, "xhc initialize failed: %s\n", err.Name());
+      exit(1);
+    } else {
+      Log(kDebug, "xhc.Initialize: %s\n", err.Name());
+    }
+
+    Log(kInfo, "xHC starting\n");
+    xhc.Run();
+
+    // [list 6.23, p.155]
+    for (int i = 1; i <= xhc.MaxPorts(); ++i) {
+      auto port = xhc.PortAt(i);
+      Log(kDebug, "Port %d: IsConnected=%d\n", i, port.IsConnected());
+
+      if (port.IsConnected()) {
+        if (auto err = ConfigurePort(xhc, port)) {
+          Log(kError, "failed to configure port: %s at %s:%d\n", err.Name(), err.File(), err.Line());
+          continue;
+        }
+      }
+    }
+  }
+
+  void ProcessEvents() {
+    while (controller->PrimaryEventRing()->HasFront()) {
+      if (auto err = ProcessEvent(*controller)) {
+          Log(kError, "Error while ProcessEvent: %s at %s:%d\n", err.Name(), err.File(), err.Line());
+      }
+    }
+  }
+}  // namespace usb::xhci

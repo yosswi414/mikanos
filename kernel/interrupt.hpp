@@ -8,11 +8,11 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
 
 #include "x86_descriptor.hpp"
+#include "message.hpp"
 
-
-// #@@range_begin(descriptor_attr_struct)
 union InterruptDescriptorAttribute {
     uint16_t data;
     struct {
@@ -27,9 +27,7 @@ union InterruptDescriptorAttribute {
         uint16_t present : 1;
     } __attribute__((packed)) bits;
 } __attribute__((packed));
-// #@@range_end(descriptor_attr_struct)
 
-// #@@range_begin(descriptor_struct)
 struct InterruptDescriptor {
     uint16_t offset_low;
     /* (p.166) x86-64 64 ビットモードではセグメンテーション機能は無効化されており
@@ -41,11 +39,9 @@ struct InterruptDescriptor {
     uint32_t offset_high;
     uint32_t reserved;
 } __attribute__((packed));
-// #@@range_end(descriptor_struct)
 
 extern std::array<InterruptDescriptor, 256> idt;
 
-// #@@range_begin(make_idt_attr)
 constexpr InterruptDescriptorAttribute MakeIDTAttr(DescriptorType type,
                                                    uint8_t descriptor_privilege_level,
                                                    bool present = true,
@@ -57,23 +53,19 @@ constexpr InterruptDescriptorAttribute MakeIDTAttr(DescriptorType type,
     attr.bits.present = present;
     return attr;
 }
-// #@@range_end(make_idt_attr)
 
 void SetIDTEntry(InterruptDescriptor& desc,
                  InterruptDescriptorAttribute attr,
                  uint64_t offset,
                  uint16_t segment_selector);
 
-// #@@range_begin(vector_numbers)
 class InterruptVector {
   public:
     enum Number {
         kXHCI = 0x40,
     };
 };
-// #@@range_end(vector_numbers)
 
-// #@@range_begin(frame_struct)
 struct InterruptFrame {
     uint64_t rip;
     uint64_t cs;
@@ -81,7 +73,10 @@ struct InterruptFrame {
     uint64_t rsp;
     uint64_t ss;
 };
-// #@@range_end(frame_struct)
+
+void NotifyEndOfInterrupt();
+
+void InitializeInterrupt(std::deque<Message>* msg_queue);
 
 namespace interrupt {
     const uintptr_t lapic_base_default = 0xfee00000;
@@ -100,13 +95,8 @@ namespace interrupt {
 
       private:
         uintptr_t lapic_base_;
-        uint32_t* lapic_id() { return reinterpret_cast<uint32_t*>(lapic_base_ + 0x20); }
-        uint32_t* end_of_interrupt() { return reinterpret_cast<uint32_t*>(lapic_base_ + 0xb0); }
+        volatile uint32_t* lapic_id() { return reinterpret_cast<uint32_t*>(lapic_base_ + 0x20); }
+        volatile uint32_t* end_of_interrupt() { return reinterpret_cast<uint32_t*>(lapic_base_ + 0xb0); }
     };
 
 }  // namespace interrupt
-
-/*
-CapabilityRegisters* const cap_;
-
-*/

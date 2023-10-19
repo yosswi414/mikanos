@@ -6,6 +6,7 @@
 #include "pci.hpp"
 
 #include "asmfunc.h"
+#include "logger.hpp"
 #include "interrupt.hpp"
 
 template <class T>
@@ -286,7 +287,6 @@ namespace pci {
                                        MSITriggerMode trigger_mode, MSIDeliveryMode delivery_mode,
                                        uint8_t vector, unsigned int num_vector_exponent) {
         MessageAddress msg_addr;
-        msg_addr.data = interrupt::Controller().GetBase();
         msg_addr.bits.destination_id = apic_id;
         MessageData msg_data;
         msg_data.bits.delivery_mode = delivery_mode;
@@ -296,3 +296,21 @@ namespace pci {
         return ConfigureMSI(dev, msg_addr.data, msg_data.data, num_vector_exponent);
     }
 }  // namespace pci
+
+void InitializePCI() {
+    if (auto err = pci::ScanAllBus()) {
+        Log(kError, "ScanAllBus: %s\n", err.Name());
+        exit(1);
+    }
+
+    for (int i = 0; i < pci::num_device; ++i) {
+        const auto& dev = pci::devices[i];
+        auto vendor_id = pci::ReadVendorId(dev);
+        auto class_code = pci::ReadClassCode(dev.bus, dev.device, dev.function);
+        Log(kDebug, "%d.%d.%d: vend %04x, class %08x, head %02x", dev.bus, dev.device, dev.function, vendor_id, class_code, dev.header_type);
+        if (dev.class_code.Match(0x0cu, 0x03u, 0x30u)) {  // 0x0c (Serial Bus Controller) / 0x03 (USB Controller) / 0x30 (xHCI)
+            Log(kDebug, " Intel");
+        }
+        Log(kDebug, "\n");
+    }
+}

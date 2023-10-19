@@ -11,8 +11,7 @@
 #include "font.hpp"
 #include "layer.hpp"
 
-// #@@range_begin(constructor)
-Console::Console(  // PixelWriter& writer,
+Console::Console(
     const PixelColor& fg_color, const PixelColor& bg_color)
     : writer_{nullptr},
       window_{},
@@ -23,9 +22,7 @@ Console::Console(  // PixelWriter& writer,
       cursor_column_{0},
       layer_id_{0} {
 }
-// #@@range_end(constructor)
 
-// #@@range_begin(put_string)
 void Console::PutString(const char* s) {
     while (*s) {
         if (*s == '\n') {
@@ -47,7 +44,6 @@ void Console::PutString(const char* s) {
     }
     if (layer_manager) layer_manager->Draw(layer_id_);
 }
-// #@@range_end(put_string)
 
 void Console::SetWriter(PixelWriter* writer) {
     if (writer == writer_) return;
@@ -71,7 +67,6 @@ unsigned int Console::LayerID() const {
     return layer_id_;
 }
 
-// #@@range_begin(newline)
 void Console::Newline() {
     cursor_column_ = 0;
     if (cursor_row_ < kRows - 1) {
@@ -100,11 +95,21 @@ void Console::Newline() {
         memset(buffer_[kRows - 1], 0, kColumns + 1);
     }
 }
-// #@@range_end(newline)
 
 void Console::Refresh() {
     FillRectangle(*writer_, {0, 0}, {KERNEL_GLYPH_WIDTH * kColumns, KERNEL_GLYPH_HEIGHT * kRows}, bg_color_);
     for (int row = 0; row < kRows; ++row) {
         WriteString(*writer_, {0, KERNEL_GLYPH_HEIGHT * row}, buffer_[row], fg_color_);
     }
+}
+
+Console* console;
+
+namespace {
+    char console_buf[sizeof(Console)];
+}
+
+void InitializeConsole() {
+    console = new (console_buf) Console{kDesktopFGColor, kDesktopBGColor};
+    console->SetWriter(screen_writer);
 }

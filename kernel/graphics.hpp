@@ -18,6 +18,7 @@ inline bool operator!=(const PixelColor& lhs, const PixelColor& rhs) {
 template <typename T>
 struct Vector2D {
     T x, y;
+    
     template <typename U>
     Vector2D<T>& operator+=(const Vector2D<U>& rhs) {
         x += rhs.x;
@@ -137,3 +138,9 @@ const PixelColor kDesktopBGColor{45, 118, 237};
 const PixelColor kDesktopFGColor{255, 255, 255};
 
 void DrawDesktop(PixelWriter& writer);
+
+extern FrameBufferConfig screen_config;
+extern PixelWriter* screen_writer;
+Vector2D<int> ScreenSize();
+
+void InitializeGraphics(const FrameBufferConfig& screen_config);

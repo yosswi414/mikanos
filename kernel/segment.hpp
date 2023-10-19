@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <array>
 
 #include "x86_descriptor.hpp"
 
@@ -36,4 +37,11 @@ void SetDataSegment(SegmentDescriptor& desc,
                     uint32_t base,
                     uint32_t limit);
 
+// kKernelCS: also referred in call of SetIDTEntry()
+const uint16_t kKernelCS = 1 << 3;  // points to gdt[1]: code segment
+const uint16_t kKernelSS = 2 << 3;  // points to gdt[2]: data segment
+const uint16_t kKernelDS = 0;       // point to null descriptor gdt[0]; DS and ES won't be used in x86-64 64-bit mode
+                                    // and FS, GS too unless explicitly used by programmer (p.193)
+
 void SetupSegments();
+void InitializeSegmentation();

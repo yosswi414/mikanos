@@ -4,6 +4,7 @@
 #include <limits>
 
 #include "error.hpp"
+#include "memory_map.hpp"
 
 namespace {
     constexpr unsigned long long operator""_KiB(unsigned long long kib) { return kib * 1024; }
@@ -26,6 +27,13 @@ class FrameID {
 
 static const FrameID kNullFrame{std::numeric_limits<size_t>::max()};
 
+/** @brief ビットマップ配列を用いてフレーム単位でメモリ管理するクラス．
+ *
+ * 1 ビットを 1 フレームに対応させて，ビットマップにより空きフレームを管理する．
+ * 配列 alloc_map の各ビットがフレームに対応し，0 なら空き，1 なら使用中．
+ * alloc_map[n] の m ビット目が対応する物理アドレスは次の式で求まる：
+ *   kFrameBytes * (n * kBitsPerMapLine + m)
+ */
 class BitmapMemoryManager {
   public:
     /** @brief このメモリ管理クラスで扱える最大の物理メモリ量 (bytes) */
@@ -66,4 +74,4 @@ class BitmapMemoryManager {
     void SetBit(FrameID frame, bool allocated);
 };
 
-Error InitializeHeap(BitmapMemoryManager& memory_manager);
+void InitializeMemoryManager(const MemoryMap& memory_map);
